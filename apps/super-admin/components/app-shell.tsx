@@ -281,6 +281,18 @@ export function AppShell({
         </div>
         {children}
       </main>
+      <nav className="mobile-bottom-nav" aria-label="Navigasi utama">
+        {navItems.map((item) => {
+          const active = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
+          const Icon = (item.icon && iconMap[item.icon as keyof typeof iconMap]) || LayoutDashboard;
+          return (
+            <Link href={item.href} prefetch={false} className={`mobile-bottom-link${active ? ' active' : ''}`} title={item.label} key={item.href}>
+              <Icon size={18} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

@@ -1,0 +1,20 @@
+Patch Mobile Bottom Navigation - Sains Masemba
+
+Isi patch:
+- apps/*/components/app-shell.tsx
+- apps/*/app/globals.css
+
+Perubahan:
+1. Desktop/laptop tetap memakai sidebar kiri.
+2. Layar <= 900px memakai bottom navigation fixed satu baris dengan horizontal scroll.
+3. Sidebar disembunyikan di layar HP/tablet sehingga menu tidak lagi membuat halaman panjang.
+4. Konten utama diberi padding bawah agar tidak tertutup bottom bar.
+5. Topbar mobile diringkas dan tetap sticky di atas.
+
+Cara pasang:
+1. Copy isi patch ke root repo.
+2. Replace/overwrite file lama.
+3. git add .
+4. git commit -m "Add mobile bottom navigation"
+5. git push origin main
+6. Redeploy Vercel.
