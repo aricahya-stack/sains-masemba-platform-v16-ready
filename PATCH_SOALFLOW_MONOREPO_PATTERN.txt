@@ -1,0 +1,40 @@
+PATCH SOAL-FLOW MONOREPO PATTERN UNTUK SAINS MASEMBA
+
+Patch ini meniru pola monorepo Soal-Flow yang berhasil di Vercel:
+1. Root memakai npm workspaces biasa: apps/* dan packages/*.
+2. Install command dibuat sederhana: cd ../.. && npm install
+3. Build command memakai script root: cd ../.. && npm run vercel-build:<portal>
+4. Prisma schema didefinisikan di root package.json: packages/db/prisma/schema.prisma
+5. Root package.json memiliki postinstall: prisma generate || true
+6. App dependencies lokal memakai workspace version "*", bukan file:../../packages/...
+7. App package tidak memakai engines node/npm ketat agar tidak muncul EBADENGINE.
+8. package-lock.json disanitasi dari URL registry internal sandbox.
+
+Setelah copy-replace patch ini:
+- Hapus pnpm-workspace.yaml jika masih ada.
+- Commit dan push ke GitHub.
+- Di Vercel, untuk setiap project gunakan Root Directory sesuai app.
+- Kosongkan override Install Command/Build Command di Dashboard jika ingin memakai vercel.json.
+  Atau isi manual sesuai berikut:
+
+SISWA
+Root Directory: apps/siswa
+Install Command: cd ../.. && npm install
+Build Command: cd ../.. && npm run vercel-build:siswa
+
+GURU
+Root Directory: apps/guru
+Install Command: cd ../.. && npm install
+Build Command: cd ../.. && npm run vercel-build:guru
+
+SUPER ADMIN
+Root Directory: apps/super-admin
+Install Command: cd ../.. && npm install
+Build Command: cd ../.. && npm run vercel-build:super-admin
+
+ORANG TUA
+Root Directory: apps/orang-tua
+Install Command: cd ../.. && npm install
+Build Command: cd ../.. && npm run vercel-build:orang-tua
+
+Redeploy dengan opsi: Redeploy without Build Cache.

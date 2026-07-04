@@ -3,37 +3,50 @@
   "private": true,
   "packageManager": "npm@10.9.2",
   "scripts": {
-    "dev": "turbo dev --continue",
+    "dev": "npm run db:generate && turbo dev --continue",
     "build": "turbo build",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "dev:super-admin": "npm run dev -w @sh/super-admin",
-    "dev:guru": "npm run dev -w @sh/guru",
-    "dev:siswa": "npm run dev -w @sh/siswa",
-    "dev:orang-tua": "npm run dev -w @sh/orang-tua",
-    "db:generate": "npm exec -w @sh/db prisma generate --",
-    "db:push": "npm exec -w @sh/db prisma db push --",
-    "db:studio": "npm exec -w @sh/db prisma studio --",
-    "db:seed": "npm run seed -w @sh/db",
-    "build:siswa": "npm run db:generate && npm run build -w @sh/siswa",
-    "build:guru": "npm run db:generate && npm run build -w @sh/guru",
-    "build:super-admin": "npm run db:generate && npm run build -w @sh/super-admin",
-    "build:orang-tua": "npm run db:generate && npm run build -w @sh/orang-tua",
-    "vercel:siswa": "npm run build:siswa",
-    "vercel:guru": "npm run build:guru",
-    "vercel:super-admin": "npm run build:super-admin",
-    "vercel:orang-tua": "npm run build:orang-tua",
-    "vercel:install": "npm ci --ignore-scripts --no-audit --no-fund"
+    "dev:super-admin": "npm run db:generate && npm run dev --workspace=@sh/super-admin",
+    "dev:guru": "npm run db:generate && npm run dev --workspace=@sh/guru",
+    "dev:siswa": "npm run db:generate && npm run dev --workspace=@sh/siswa",
+    "dev:orang-tua": "npm run db:generate && npm run dev --workspace=@sh/orang-tua",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "npm run seed --workspace=@sh/db",
+    "build:siswa": "npm run build --workspace=@sh/siswa",
+    "build:guru": "npm run build --workspace=@sh/guru",
+    "build:super-admin": "npm run build --workspace=@sh/super-admin",
+    "build:orang-tua": "npm run build --workspace=@sh/orang-tua",
+    "postinstall": "prisma generate || true",
+    "vercel-build:super-admin": "npm run db:generate && npm run build --workspace=@sh/super-admin",
+    "vercel-build:guru": "npm run db:generate && npm run build --workspace=@sh/guru",
+    "vercel-build:siswa": "npm run db:generate && npm run build --workspace=@sh/siswa",
+    "vercel-build:orang-tua": "npm run db:generate && npm run build --workspace=@sh/orang-tua",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:studio": "prisma studio"
   },
   "devDependencies": {
-    "turbo": "^2.10.3"
+    "prisma": "^6.5.0",
+    "turbo": "^2.10.3",
+    "typescript": "^5.8.0",
+    "tsx": "^4.19.2"
   },
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "engines": {
-    "node": "20.x",
-    "npm": "10.x"
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.5.0"
+  },
+  "prisma": {
+    "schema": "packages/db/prisma/schema.prisma"
   }
 }
