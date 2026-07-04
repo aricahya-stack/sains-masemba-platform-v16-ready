@@ -23,7 +23,7 @@
     "vercel:guru": "npm run build:guru",
     "vercel:super-admin": "npm run build:super-admin",
     "vercel:orang-tua": "npm run build:orang-tua",
-    "vercel:install": "PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm ci --no-audit --no-fund"
+    "vercel:install": "npm ci --ignore-scripts --no-audit --no-fund --prefer-offline"
   },
   "devDependencies": {
     "turbo": "^2.10.3"
