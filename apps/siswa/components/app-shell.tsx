@@ -227,7 +227,7 @@ export function AppShell({
             return (
               <div key={item.href}>
                 {showSection ? <div className="nav-section-title">{item.section}</div> : null}
-                <Link href={item.href} className={`nav-link${active ? ' active' : ''}`} title={item.label}>
+                <Link href={item.href} prefetch={false} className={`nav-link${active ? ' active' : ''}`} title={item.label}>
                   <Icon size={16} />
                   <span>{item.label}</span>
                 </Link>
@@ -243,7 +243,7 @@ export function AppShell({
                 <strong>{currentUser ? currentUser.fullName : 'Mode tamu'}</strong>
                 <small>{currentUser ? currentUser.role : 'Belum login'}</small>
                 {currentUser ? (
-                  <Link className="sidebar-logout" href="/logout">
+                  <Link className="sidebar-logout" href="/logout" prefetch={false}>
                     <LogOut size={15} />
                     <span>Keluar</span>
                   </Link>

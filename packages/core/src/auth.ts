@@ -4,7 +4,8 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { prisma, UserRole } from '@sh/db';
 
-const COOKIE_NAME = 'sh_session';
+export const SESSION_COOKIE_NAME = 'sh_session';
+const SESSION_MAX_AGE = 60 * 60 * 24 * 7;
 
 export type SessionPayload = {
   userId: string;
@@ -19,6 +20,23 @@ function secret() {
 
 function sign(data: string) {
   return crypto.createHmac('sha256', secret()).update(data).digest('base64url');
+}
+
+export function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax' as const,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: SESSION_MAX_AGE,
+  };
+}
+
+export function clearSessionCookieOptions() {
+  return {
+    ...sessionCookieOptions(),
+    maxAge: 0,
+  };
 }
 
 export function encodeSession(payload: SessionPayload) {
@@ -40,7 +58,7 @@ export function decodeSession(value: string | undefined | null): SessionPayload 
 
 export async function getSessionPayload() {
   const store = await cookies();
-  return decodeSession(store.get(COOKIE_NAME)?.value);
+  return decodeSession(store.get(SESSION_COOKIE_NAME)?.value);
 }
 
 export async function getCurrentUser() {
@@ -68,23 +86,17 @@ export async function requireRole(roles: UserRole | UserRole[]) {
 
 export async function createSessionForUser(user: { id: string; role: UserRole; email: string; fullName: string }) {
   const store = await cookies();
-  store.set(COOKIE_NAME, encodeSession({
+  store.set(SESSION_COOKIE_NAME, encodeSession({
     userId: user.id,
     role: user.role,
     email: user.email,
     fullName: user.fullName,
-  }), {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: false,
-    path: '/',
-    maxAge: 60 * 60 * 24 * 7,
-  });
+  }), sessionCookieOptions());
 }
 
 export async function destroySession() {
   const store = await cookies();
-  store.delete(COOKIE_NAME);
+  store.set(SESSION_COOKIE_NAME, '', clearSessionCookieOptions());
 }
 
 export async function authenticateByRole(role: UserRole, email: string, password: string) {
@@ -105,7 +117,6 @@ export function roleLabel(role: UserRole) {
   };
   return map[role];
 }
-
 
 export async function hashPassword(password: string) {
   return bcrypt.hash(password, 10);

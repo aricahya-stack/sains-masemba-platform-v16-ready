@@ -1,0 +1,19 @@
+PATCH: Runtime Session Navigation Fix
+
+Masalah yang diperbaiki:
+- Login berhasil, tetapi saat klik menu internal seperti User/Guru/Siswa/Orang Tua, aplikasi kembali ke halaman login.
+- Penyebab paling mungkin adalah session cookie/redirect/prefetch Next.js yang belum cukup stabil pada runtime Vercel.
+
+Perubahan:
+1. Cookie session dipusatkan di packages/core/src/auth.ts.
+2. Cookie session memakai secure=true otomatis saat production.
+3. Login redirect diganti menjadi status 303 agar POST login tidak bermasalah saat redirect.
+4. Login/logout diberi header Cache-Control: no-store.
+5. Logout menghapus cookie dengan opsi path/session yang sama.
+6. Prefetch sidebar menu dimatikan agar Next.js tidak menyimpan redirect /login dari prefetch lama.
+
+Setelah patch:
+- Copy/replace semua file patch ke root repository.
+- Commit dan push ke GitHub.
+- Redeploy without Build Cache di Vercel.
+- Setelah deploy, clear cookies situs atau klik logout lalu login ulang.
