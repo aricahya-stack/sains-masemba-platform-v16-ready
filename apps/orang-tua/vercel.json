@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd ../.. && corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --no-frozen-lockfile --ignore-scripts",
-  "buildCommand": "cd ../.. && corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm run db:generate && pnpm --filter @sh/orang-tua build",
+  "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000",
+  "buildCommand": "cd ../.. && npm run db:generate && npm run build -w @sh/orang-tua",
   "framework": "nextjs"
 }
