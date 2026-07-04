@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund --fetch-retries=5 --fetch-retry-mintimeout=20000 --fetch-retry-maxtimeout=120000",
-  "buildCommand": "cd ../.. && npm run db:generate && npm run build -w @sh/siswa",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && npm install",
+  "buildCommand": "cd ../.. && npm run vercel-build:siswa",
+  "devCommand": "cd ../.. && npm run dev:siswa"
 }
