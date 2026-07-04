@@ -1,0 +1,37 @@
+INSTALL AWAL - MACBOOK / TERMINAL
+
+1. Masuk ke folder project
+   cd sains-masemba-platform-v15
+
+2. Install dependency
+   npm install
+
+4. Buat file env dari root project
+   cp .env.example .env
+
+5. Isi DATABASE_URL pada file .env
+
+6. Generate Prisma client
+   npm run db:generate
+
+7. Push schema ke database
+   npm run db:push
+
+8. Isi akun awal (opsional, sudah ada default) lalu seed
+   npm run db:seed
+
+9. Jalankan semua app
+   npm run dev
+
+CATATAN PENTING
+- Setelah membuat .env di root, salin juga ke packages/db/.env dan ke tiap app sebagai .env.local bila diperlukan pada setup lokal.
+- Jika login error 500, hampir selalu karena DATABASE_URL di .env belum benar atau database belum di-push/seed.
+- Akun awal default:
+  superadmin@sh.local
+  guru@sh.local
+  siswa@sh.local
+  orangtua@sh.local
+  password: Admin123!
+
+
+Setelah update v15, jalankan lagi npm run db:push bila database sudah pernah dipakai agar struktur terbaru tetap sinkron.

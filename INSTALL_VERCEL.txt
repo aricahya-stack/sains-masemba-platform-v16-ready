@@ -1,0 +1,68 @@
+PANDUAN DEPLOY VERCEL - SAINS MASEMBA v16
+
+Status perbaikan:
+- Konfigurasi Node.js diseragamkan ke Node 22.x dan npm 10.x.
+- Setiap aplikasi Next.js diberi engines sendiri agar Vercel tidak memakai default Node 24/npm 11.
+- package-lock.json sudah diselaraskan dengan package.json.
+- Konfigurasi monorepo Next.js ditambahkan: outputFileTracingRoot mengarah ke root repo.
+- Layout app dibuat force-dynamic agar halaman yang memakai database/session tidak diprerender secara statis saat build.
+- TypeScript untuk semua app sudah lolos typecheck lokal.
+
+A. Deploy aplikasi SISWA
+1. Root Directory: apps/siswa
+2. Install Command:
+   cd ../.. && PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm ci --no-audit --no-fund
+3. Build Command:
+   cd ../.. && npm run db:generate && npm run build -w @sh/siswa
+4. Framework Preset: Next.js
+
+B. Deploy aplikasi GURU
+1. Root Directory: apps/guru
+2. Install Command:
+   cd ../.. && PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm ci --no-audit --no-fund
+3. Build Command:
+   cd ../.. && npm run db:generate && npm run build -w @sh/guru
+4. Framework Preset: Next.js
+
+C. Deploy aplikasi SUPER ADMIN
+1. Root Directory: apps/super-admin
+2. Install Command:
+   cd ../.. && PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm ci --no-audit --no-fund
+3. Build Command:
+   cd ../.. && npm run db:generate && npm run build -w @sh/super-admin
+4. Framework Preset: Next.js
+
+D. Deploy aplikasi ORANG TUA
+1. Root Directory: apps/orang-tua
+2. Install Command:
+   cd ../.. && PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm ci --no-audit --no-fund
+3. Build Command:
+   cd ../.. && npm run db:generate && npm run build -w @sh/orang-tua
+4. Framework Preset: Next.js
+
+Environment Variables wajib di Vercel:
+- DATABASE_URL
+- DIRECT_URL
+- AUTH_SECRET
+- BLOB_READ_WRITE_TOKEN, jika fitur upload file/blob dipakai
+- NEXT_PUBLIC_APP_NAME, opsional
+- SEED_SUPER_ADMIN_EMAIL, opsional
+- SEED_GURU_EMAIL, opsional
+- SEED_SISWA_EMAIL, opsional
+- SEED_ORANG_TUA_EMAIL, opsional
+- SEED_DEFAULT_PASSWORD, opsional
+
+Penting:
+- Hapus install command lama di Vercel yang berisi npm install --prefix=../...
+- Node.js Version di Vercel boleh dibiarkan, karena package.json di root dan semua app sudah memaksa Node 22.x.
+- Jika Vercel tetap memakai Node 24 karena cache/project lama, buka Project Settings > Build and Deployment > Node.js Version, lalu pilih 22.x.
+- Untuk empat portal terpisah, buat empat project Vercel dengan Root Directory berbeda: apps/super-admin, apps/guru, apps/siswa, dan apps/orang-tua.
+
+Perintah lokal yang disarankan:
+  npm ci
+  npm run db:generate
+  npm run typecheck
+  npm run build:siswa
+
+Catatan sandbox:
+- Build lokal di lingkungan ChatGPT tidak dapat menyelesaikan prisma generate karena akses ke binaries.prisma.sh diblokir. Di Vercel, proses ini normal selama deployment environment memiliki internet.

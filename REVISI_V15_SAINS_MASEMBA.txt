@@ -1,0 +1,8 @@
+REVISI V15 - Sains Masemba
+
+1. Ikon aplikasi diganti dengan ikon SVG baru yang lebih sederhana: hanya buku dan gelas reaksi.
+2. Favicon, app icon, dan public icon pada aplikasi siswa, guru, super admin, dan orang tua disamakan dengan ikon baru.
+3. Branding tetap menggunakan Sains Masemba.
+4. © SH tetap dipertahankan karena aplikasi dibuat oleh Sinta Herahmawati.
+5. Nama pengguna, role, tombol Keluar, dan © SH dibuat dalam satu kotak transparan di sidebar.
+6. Avatar pengguna tidak lagi menggunakan huruf, tetapi memakai ikon user.

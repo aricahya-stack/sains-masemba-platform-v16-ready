@@ -1,0 +1,20 @@
+{
+  "name": "@sh/core",
+  "private": true,
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "echo core-package",
+    "typecheck": "echo ok",
+    "lint": "echo ok"
+  },
+  "dependencies": {
+    "@sh/db": "file:../db",
+    "bcryptjs": "^2.4.3"
+  },
+  "peerDependencies": {
+    "next": "^15.2.0",
+    "react": "^19.0.0"
+  }
+}

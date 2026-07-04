@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" fill="none"/>
+  
+  <!-- Open book -->
+  <path d="M82 356C121 346 160 341 199 341C221 341 242 347 256 361C270 347 291 341 313 341C352 341 391 346 430 356" stroke="#0B5DB4" stroke-width="18" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M90 353L90 229C128 219 164 214 202 214C224 214 244 220 256 236V386C244 370 224 364 202 364C164 364 128 369 90 379V353Z" stroke="#0B5DB4" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M422 353L422 229C384 219 348 214 310 214C288 214 268 220 256 236V386C268 370 288 364 310 364C348 364 384 369 422 379V353Z" stroke="#0B5DB4" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M110 349C144 343 172 340 201 340C223 340 242 346 256 361" stroke="#0B5DB4" stroke-width="12" stroke-linecap="round"/>
+  <path d="M402 349C368 343 340 340 311 340C289 340 270 346 256 361" stroke="#0B5DB4" stroke-width="12" stroke-linecap="round"/>
+  
+  <!-- Flask body -->
+  <path d="M230 102H282" stroke="#11B8B8" stroke-width="18" stroke-linecap="round"/>
+  <path d="M245 102V177L187 294C177 313 191 336 214 336H298C321 336 335 313 325 294L267 177V102" stroke="#11B8B8" stroke-width="18" stroke-linejoin="round"/>
+  
+  <!-- Liquid -->
+  <path d="M210 290C223 280 236 282 250 284C266 287 282 292 302 286C308 284 313 282 317 280L323 294C333 313 319 336 296 336H214C191 336 177 313 187 294L190 288C196 291 202 292 210 290Z" fill="#11B8B8"/>
+</svg>
