@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund --prefer-offline",
-  "buildCommand": "cd ../.. && npm run db:generate && npm run build -w @sh/siswa",
+  "installCommand": "cd ../.. && corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --no-frozen-lockfile --ignore-scripts",
+  "buildCommand": "cd ../.. && corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm run db:generate && pnpm --filter @sh/siswa build",
   "framework": "nextjs"
 }
