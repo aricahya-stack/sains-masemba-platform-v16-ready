@@ -1,7 +1,7 @@
 {
   "name": "sains-masemba-platform-v16",
   "private": true,
-  "packageManager": "pnpm@9.15.9",
+  "packageManager": "npm@10.9.2",
   "scripts": {
     "dev": "turbo dev --continue",
     "build": "turbo build",
@@ -11,19 +11,19 @@
     "dev:guru": "npm run dev -w @sh/guru",
     "dev:siswa": "npm run dev -w @sh/siswa",
     "dev:orang-tua": "npm run dev -w @sh/orang-tua",
-    "db:generate": "pnpm --filter @sh/db exec prisma generate",
-    "db:push": "pnpm --filter @sh/db exec prisma db push",
-    "db:studio": "pnpm --filter @sh/db exec prisma studio",
-    "db:seed": "pnpm --filter @sh/db seed",
-    "build:siswa": "pnpm run db:generate && pnpm --filter @sh/siswa build",
-    "build:guru": "pnpm run db:generate && pnpm --filter @sh/guru build",
-    "build:super-admin": "pnpm run db:generate && pnpm --filter @sh/super-admin build",
-    "build:orang-tua": "pnpm run db:generate && pnpm --filter @sh/orang-tua build",
-    "vercel:siswa": "pnpm run build:siswa",
-    "vercel:guru": "pnpm run build:guru",
-    "vercel:super-admin": "pnpm run build:super-admin",
-    "vercel:orang-tua": "pnpm run build:orang-tua",
-    "vercel:install": "corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --no-frozen-lockfile --ignore-scripts"
+    "db:generate": "npm exec -w @sh/db prisma generate --",
+    "db:push": "npm exec -w @sh/db prisma db push --",
+    "db:studio": "npm exec -w @sh/db prisma studio --",
+    "db:seed": "npm run seed -w @sh/db",
+    "build:siswa": "npm run db:generate && npm run build -w @sh/siswa",
+    "build:guru": "npm run db:generate && npm run build -w @sh/guru",
+    "build:super-admin": "npm run db:generate && npm run build -w @sh/super-admin",
+    "build:orang-tua": "npm run db:generate && npm run build -w @sh/orang-tua",
+    "vercel:siswa": "npm run build:siswa",
+    "vercel:guru": "npm run build:guru",
+    "vercel:super-admin": "npm run build:super-admin",
+    "vercel:orang-tua": "npm run build:orang-tua",
+    "vercel:install": "npm ci --ignore-scripts --no-audit --no-fund"
   },
   "devDependencies": {
     "turbo": "^2.10.3"
@@ -33,7 +33,7 @@
     "packages/*"
   ],
   "engines": {
-    "node": "22.x",
+    "node": "20.x",
     "npm": "10.x"
   }
 }
