@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "installCommand": "cd ../.. && PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm ci --no-audit --no-fund",
+  "installCommand": "cd ../.. && npm ci --ignore-scripts --no-audit --no-fund --prefer-offline",
   "buildCommand": "cd ../.. && npm run db:generate && npm run build -w @sh/orang-tua",
   "framework": "nextjs"
 }
