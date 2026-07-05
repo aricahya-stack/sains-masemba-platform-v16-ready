@@ -601,6 +601,26 @@ body { font-family: var(--app-font, Inter, ui-sans-serif, system-ui, -apple-syst
   padding:0;
   border-radius:15px;
 }
+.wysiwyg-editor .editor-tool-button.is-active {
+  border-color: color-mix(in srgb, var(--brand) 42%, var(--border));
+  background: color-mix(in srgb, var(--brand) 14%, var(--surface));
+  color: var(--brand);
+}
+.editor-source {
+  width:100%;
+  min-height:260px;
+  display:block;
+  border:0;
+  outline:0;
+  resize:vertical;
+  padding:26px 30px;
+  background: color-mix(in srgb, var(--surface-muted) 52%, var(--surface));
+  color:var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size:.98rem;
+  line-height:1.65;
+  white-space:pre-wrap;
+}
 .wysiwyg-content {
   border:0;
   background:var(--surface);
