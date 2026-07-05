@@ -20,6 +20,7 @@ async function serialize(linkId: string) {
     isActive: String(link.isActive),
     parentName: link.parent.fullName,
     studentName: link.student.fullName,
+    studentClass: link.student.className || '-',
   };
 }
 

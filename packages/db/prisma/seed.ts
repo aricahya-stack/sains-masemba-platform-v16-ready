@@ -29,6 +29,7 @@ async function main() {
       email: process.env.SEED_SISWA_EMAIL || "siswa@sh.local",
       role: UserRole.SISWA,
       phone: "081200000003",
+      className: "Kelas 9A",
     },
     {
       key: "orangTua",
@@ -41,12 +42,14 @@ async function main() {
 
   const users: Record<string, Awaited<ReturnType<typeof prisma.user.upsert>>> = {};
   for (const user of userInputs) {
+    const className = user.role === UserRole.SISWA && 'className' in user ? user.className : null;
     users[user.key] = await prisma.user.upsert({
       where: { email: user.email },
       update: {
         fullName: user.fullName,
         role: user.role,
         phone: user.phone,
+        className,
         passwordHash,
         status: "ACTIVE",
       },
@@ -55,6 +58,7 @@ async function main() {
         email: user.email,
         role: user.role,
         phone: user.phone,
+        className,
         passwordHash,
         status: "ACTIVE",
       },

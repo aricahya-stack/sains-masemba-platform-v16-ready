@@ -20,6 +20,7 @@ export default async function UsersPage() {
       ],
     },
     { name: 'phone', label: 'Nomor HP' },
+    { name: 'className', label: 'Kelas siswa', placeholder: 'Diisi jika role Siswa' },
     { name: 'status', label: 'Status', type: 'select', options: ['ACTIVE', 'INACTIVE'] },
     { name: 'password', label: 'Password baru', type: 'password', placeholder: 'Kosongkan jika tidak diubah' },
   ];
@@ -30,6 +31,7 @@ export default async function UsersPage() {
     email: user.email,
     role: user.role,
     phone: user.phone || '',
+    className: user.className || '',
     status: user.status,
     password: '',
   }));
@@ -47,6 +49,7 @@ export default async function UsersPage() {
         { key: 'fullName', label: 'Nama' },
         { key: 'email', label: 'Email' },
         { key: 'role', label: 'Role' },
+        { key: 'className', label: 'Kelas' },
         { key: 'phone', label: 'No. HP' },
         { key: 'status', label: 'Status' },
       ]}

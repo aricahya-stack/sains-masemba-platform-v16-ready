@@ -15,6 +15,7 @@ export default async function SiswaPage() {
     { name: 'email', label: 'Email' },
     { name: 'role', label: 'Role', type: 'select', options: [{ label: 'Siswa', value: 'SISWA' }] },
     { name: 'phone', label: 'Nomor HP' },
+    { name: 'className', label: 'Kelas', placeholder: 'Contoh: 7A, 8B, 9C' },
     { name: 'status', label: 'Status', type: 'select', options: ['ACTIVE', 'INACTIVE'] },
     { name: 'password', label: 'Password baru', type: 'password', placeholder: 'Kosongkan jika tidak diubah' },
   ];
@@ -25,6 +26,7 @@ export default async function SiswaPage() {
     email: student.email,
     role: student.role,
     phone: student.phone || '',
+    className: student.className || '',
     status: student.status,
     password: '',
   }));
@@ -41,6 +43,7 @@ export default async function SiswaPage() {
       tableColumns={[
         { key: 'fullName', label: 'Nama' },
         { key: 'email', label: 'Email' },
+        { key: 'className', label: 'Kelas' },
         { key: 'phone', label: 'No. HP' },
         { key: 'status', label: 'Status' },
       ]}

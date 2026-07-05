@@ -8,6 +8,7 @@ function serialize(user: {
   email: string;
   role: string;
   phone: string | null;
+  className: string | null;
   status: string;
 }) {
   return {
@@ -16,6 +17,7 @@ function serialize(user: {
     email: user.email,
     role: user.role,
     phone: user.phone || '',
+    className: user.className || '',
     status: user.status,
     password: '',
   };
@@ -37,6 +39,7 @@ export async function POST(request: Request) {
       email: String(body.email).toLowerCase(),
       role: body.role,
       phone: body.phone ? String(body.phone) : null,
+      className: body.role === UserRole.SISWA && body.className ? String(body.className) : null,
       status: body.status || 'ACTIVE',
       passwordHash: body.password ? await hashPassword(String(body.password)) : null,
     },
@@ -54,6 +57,7 @@ export async function PUT(request: Request) {
     email: String(body.email || '').toLowerCase(),
     role: body.role,
     phone: body.phone ? String(body.phone) : null,
+    className: body.role === UserRole.SISWA && body.className ? String(body.className) : null,
     status: body.status || 'ACTIVE',
   };
   if (body.password) {

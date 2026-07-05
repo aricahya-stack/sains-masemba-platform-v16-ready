@@ -15,7 +15,7 @@ export default async function ParentLinksPage() {
 
   const fields: FieldDef[] = [
     { name: 'parentId', label: 'Orang tua', type: 'select', options: parents.map((item) => ({ value: item.id, label: `${item.fullName} • ${item.email}` })) },
-    { name: 'studentId', label: 'Siswa', type: 'select', options: students.map((item) => ({ value: item.id, label: `${item.fullName} • ${item.email}` })) },
+    { name: 'studentId', label: 'Siswa', type: 'select', options: students.map((item) => ({ value: item.id, label: `${item.fullName} • ${item.email}${item.className ? ` • ${item.className}` : ''}` })) },
     { name: 'relationType', label: 'Relasi' },
     { name: 'isActive', label: 'Aktif', type: 'select', options: [{ value: 'true', label: 'Aktif' }, { value: 'false', label: 'Nonaktif' }] },
   ];
@@ -28,6 +28,7 @@ export default async function ParentLinksPage() {
     isActive: String(link.isActive),
     parentName: link.parent.fullName,
     studentName: link.student.fullName,
+    studentClass: link.student.className || '-',
   }));
 
   return (
@@ -41,6 +42,7 @@ export default async function ParentLinksPage() {
       initialRows={initialRows}
       tableColumns={[
         { key: 'studentName', label: 'Siswa' },
+        { key: 'studentClass', label: 'Kelas' },
         { key: 'parentName', label: 'Orang Tua' },
         { key: 'relationType', label: 'Relasi' },
         { key: 'isActive', label: 'Aktif' },
