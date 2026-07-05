@@ -1,0 +1,21 @@
+UPDATE MULTI JENIS SOAL
+
+Versi ini menambahkan:
+1. Pilihan ganda biasa.
+2. Pilihan ganda kompleks.
+3. Benar atau salah.
+4. Sistem penilaian per soal:
+   - EXACT_MATCH
+   - PARTIAL_NO_PENALTY
+5. Template Excel bank soal baru.
+6. Contoh latihan TKA pada halaman siswa.
+
+Langkah penting setelah upload ke Vercel:
+1. Pastikan environment DATABASE_URL dan DIRECT_URL tetap terisi.
+2. Jalankan migrasi database satu kali dari terminal lokal atau Vercel CLI:
+   npx prisma migrate deploy
+
+Alternatif jika tidak memakai migration deploy:
+   npx prisma db push
+
+Setelah database berubah, deploy ulang aplikasi guru dan siswa.

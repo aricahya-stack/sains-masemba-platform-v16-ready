@@ -31,6 +31,17 @@ enum TryoutStatus {
   ARCHIVED
 }
 
+enum QuestionType {
+  SINGLE_CHOICE
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+}
+
+enum ScoringMode {
+  EXACT_MATCH
+  PARTIAL_NO_PENALTY
+}
+
 model User {
   id             String              @id @default(cuid())
   fullName       String
@@ -145,6 +156,9 @@ model Question {
   blueprintId     String?
   authorId        String
   stimulusOrder   Int             @default(1)
+  questionType    QuestionType    @default(SINGLE_CHOICE)
+  scoringMode     ScoringMode     @default(EXACT_MATCH)
+  maxScore        Float           @default(1)
   questionText    String
   questionHtml    String?
   explanation     String?
@@ -214,6 +228,10 @@ model AttemptAnswer {
   attemptId        String
   questionId       String
   selectedOptionId String?
+  selectedOptionIds String[]       @default([])
+  trueFalseAnswers Json?
+  score            Float          @default(0)
+  isCorrect        Boolean        @default(false)
   answeredAt       DateTime       @default(now())
   attempt          Attempt        @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question         Question       @relation(fields: [questionId], references: [id], onDelete: Cascade)

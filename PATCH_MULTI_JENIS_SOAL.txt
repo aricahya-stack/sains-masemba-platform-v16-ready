@@ -1,0 +1,30 @@
+PATCH MULTI JENIS SOAL
+
+File utama yang diubah:
+- packages/db/prisma/schema.prisma
+- packages/db/prisma/migrations/20260705180400_multi_question_types/migration.sql
+- packages/db/prisma/seed.ts
+- apps/guru/app/api/questions/route.ts
+- apps/guru/app/bank-soal/page.tsx
+- apps/guru/app/imports/page.tsx
+- apps/guru/components/import-center.tsx
+- apps/siswa/app/latihan/page.tsx
+- apps/siswa/app/tryout/[id]/page.tsx
+- apps/siswa/app/api/attempts/[id]/answer/route.ts
+- apps/siswa/app/api/attempts/[id]/submit/route.ts
+- apps/siswa/app/pembahasan/page.tsx
+- apps/siswa/components/practice-board.tsx
+- apps/siswa/components/exam-mode.tsx
+- apps/siswa/lib/question-scoring.ts
+- apps/orang-tua/app/progres/page.tsx
+- templates/question-import-template.xlsx
+- apps/*/public/templates/question-import-template.xlsx
+
+Fitur baru:
+1. Jenis soal SINGLE_CHOICE, MULTIPLE_CHOICE, TRUE_FALSE.
+2. Penilaian EXACT_MATCH dan PARTIAL_NO_PENALTY.
+3. Bank soal guru mendukung input jenis soal dan sistem penilaian.
+4. Tryout siswa mendukung radio button, checkbox, dan tabel benar-salah.
+5. Submit tryout menghitung skor berdasarkan bobot soal.
+6. Pembahasan menampilkan skor per soal, kunci, dan jawaban siswa.
+7. Latihan siswa memuat tiga contoh soal TKA.

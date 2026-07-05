@@ -1,4 +1,4 @@
-import { PrismaClient, PublishStatus, TryoutStatus, UserRole } from "@prisma/client";
+import { PrismaClient, PublishStatus, QuestionType, ScoringMode, TryoutStatus, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { slugify } from "../../core/src/utils";
 
@@ -195,10 +195,13 @@ async function main() {
       topicId: topics[0].id,
       blueprintId: blueprint.id,
       authorId: users.guru.id,
-      questionText: "Sebuah bola diam ditendang hingga bergerak ke depan. Pernyataan yang tepat adalah ...",
-      questionHtml: "<p>Sebuah bola diam ditendang hingga bergerak ke depan. Pernyataan yang tepat adalah ...</p>",
-      explanation: "<p>Gaya dapat mengubah keadaan benda dari diam menjadi bergerak.</p>",
-      difficulty: "Sedang",
+      questionType: QuestionType.SINGLE_CHOICE,
+      scoringMode: ScoringMode.EXACT_MATCH,
+      maxScore: 1,
+      questionText: "Sebuah sepeda bermassa 20 kg mengalami percepatan 2 m/s². Besar gaya yang bekerja pada sepeda adalah ...",
+      questionHtml: "<p>Sebuah sepeda bermassa 20 kg mengalami percepatan 2 m/s². Besar gaya yang bekerja pada sepeda adalah ...</p>",
+      explanation: "<p>Gunakan Hukum II Newton, yaitu F = m × a. Jadi F = 20 × 2 = 40 N.</p>",
+      difficulty: "Mudah",
       status: PublishStatus.PUBLISHED,
       stimulusOrder: 1,
     },
@@ -207,10 +210,13 @@ async function main() {
       topicId: topics[0].id,
       blueprintId: blueprint.id,
       authorId: users.guru.id,
-      questionText: "Sebuah bola diam ditendang hingga bergerak ke depan. Pernyataan yang tepat adalah ...",
-      questionHtml: "<p>Sebuah bola diam ditendang hingga bergerak ke depan. Pernyataan yang tepat adalah ...</p>",
-      explanation: "<p>Gaya dapat mengubah keadaan benda dari diam menjadi bergerak.</p>",
-      difficulty: "Sedang",
+      questionType: QuestionType.SINGLE_CHOICE,
+      scoringMode: ScoringMode.EXACT_MATCH,
+      maxScore: 1,
+      questionText: "Sebuah sepeda bermassa 20 kg mengalami percepatan 2 m/s². Besar gaya yang bekerja pada sepeda adalah ...",
+      questionHtml: "<p>Sebuah sepeda bermassa 20 kg mengalami percepatan 2 m/s². Besar gaya yang bekerja pada sepeda adalah ...</p>",
+      explanation: "<p>Gunakan Hukum II Newton, yaitu F = m × a. Jadi F = 20 × 2 = 40 N.</p>",
+      difficulty: "Mudah",
       status: PublishStatus.PUBLISHED,
       stimulusOrder: 1,
     },
@@ -219,10 +225,10 @@ async function main() {
   await prisma.questionOption.deleteMany({ where: { questionId: question.id } });
   await prisma.questionOption.createMany({
     data: [
-      { questionId: question.id, label: "A", optionText: "Gaya hanya mengubah warna benda", isCorrect: false },
-      { questionId: question.id, label: "B", optionText: "Gaya dapat mengubah benda diam menjadi bergerak", isCorrect: true },
-      { questionId: question.id, label: "C", optionText: "Gaya tidak berpengaruh pada gerak", isCorrect: false },
-      { questionId: question.id, label: "D", optionText: "Bola bergerak tanpa gaya", isCorrect: false },
+      { questionId: question.id, label: "A", optionText: "10 N", isCorrect: false },
+      { questionId: question.id, label: "B", optionText: "20 N", isCorrect: false },
+      { questionId: question.id, label: "C", optionText: "40 N", isCorrect: true },
+      { questionId: question.id, label: "D", optionText: "80 N", isCorrect: false },
     ],
   });
 
@@ -231,10 +237,13 @@ async function main() {
     update: {
       topicId: topics[1].id,
       authorId: users.guru.id,
-      questionText: "Perubahan wujud dari cair menjadi gas disebut ...",
-      questionHtml: "<p>Perubahan wujud dari cair menjadi gas disebut ...</p>",
-      explanation: "<p>Perubahan cair menjadi gas disebut menguap.</p>",
-      difficulty: "Mudah",
+      questionType: QuestionType.MULTIPLE_CHOICE,
+      scoringMode: ScoringMode.PARTIAL_NO_PENALTY,
+      maxScore: 1,
+      questionText: "Pernyataan yang benar tentang energi pada benda yang jatuh dari ketinggian tertentu adalah ...",
+      questionHtml: "<p>Pernyataan yang benar tentang energi pada benda yang jatuh dari ketinggian tertentu adalah ...</p>",
+      explanation: "<p>Energi potensial bergantung pada m, g, dan h. Saat benda jatuh, energi kinetik bertambah. Jika hambatan udara diabaikan, energi mekanik tetap.</p>",
+      difficulty: "Sedang",
       status: PublishStatus.PUBLISHED,
       stimulusOrder: 1,
     },
@@ -242,10 +251,13 @@ async function main() {
       code: "Q-IPA-002",
       topicId: topics[1].id,
       authorId: users.guru.id,
-      questionText: "Perubahan wujud dari cair menjadi gas disebut ...",
-      questionHtml: "<p>Perubahan wujud dari cair menjadi gas disebut ...</p>",
-      explanation: "<p>Perubahan cair menjadi gas disebut menguap.</p>",
-      difficulty: "Mudah",
+      questionType: QuestionType.MULTIPLE_CHOICE,
+      scoringMode: ScoringMode.PARTIAL_NO_PENALTY,
+      maxScore: 1,
+      questionText: "Pernyataan yang benar tentang energi pada benda yang jatuh dari ketinggian tertentu adalah ...",
+      questionHtml: "<p>Pernyataan yang benar tentang energi pada benda yang jatuh dari ketinggian tertentu adalah ...</p>",
+      explanation: "<p>Energi potensial bergantung pada m, g, dan h. Saat benda jatuh, energi kinetik bertambah. Jika hambatan udara diabaikan, energi mekanik tetap.</p>",
+      difficulty: "Sedang",
       status: PublishStatus.PUBLISHED,
       stimulusOrder: 1,
     },
@@ -253,10 +265,49 @@ async function main() {
   await prisma.questionOption.deleteMany({ where: { questionId: question2.id } });
   await prisma.questionOption.createMany({
     data: [
-      { questionId: question2.id, label: "A", optionText: "Membeku", isCorrect: false },
-      { questionId: question2.id, label: "B", optionText: "Mengembun", isCorrect: false },
-      { questionId: question2.id, label: "C", optionText: "Menguap", isCorrect: true },
-      { questionId: question2.id, label: "D", optionText: "Mencair", isCorrect: false },
+      { questionId: question2.id, label: "A", optionText: "Energi potensial bergantung pada massa, gravitasi, dan ketinggian.", isCorrect: true },
+      { questionId: question2.id, label: "B", optionText: "Energi kinetik selalu nol selama benda bergerak jatuh.", isCorrect: false },
+      { questionId: question2.id, label: "C", optionText: "Energi kinetik bertambah saat kecepatan benda meningkat.", isCorrect: true },
+      { questionId: question2.id, label: "D", optionText: "Energi mekanik tetap jika hambatan udara diabaikan.", isCorrect: true },
+    ],
+  });
+
+  const question3 = await prisma.question.upsert({
+    where: { code: "Q-IPA-003" },
+    update: {
+      topicId: topics[2].id,
+      authorId: users.guru.id,
+      questionType: QuestionType.TRUE_FALSE,
+      scoringMode: ScoringMode.PARTIAL_NO_PENALTY,
+      maxScore: 1,
+      questionText: "Tentukan benar atau salah untuk setiap pernyataan tentang susunan atom oksigen.",
+      questionHtml: "<p>Tentukan benar atau salah untuk setiap pernyataan tentang susunan atom oksigen.</p>",
+      explanation: "<p>Atom oksigen netral memiliki 8 proton dan 8 elektron. Jika nomor massanya 16, jumlah neutronnya 8. Susunan elektronnya 2 pada kulit K dan 6 pada kulit L.</p>",
+      difficulty: "Sedang",
+      status: PublishStatus.PUBLISHED,
+      stimulusOrder: 1,
+    },
+    create: {
+      code: "Q-IPA-003",
+      topicId: topics[2].id,
+      authorId: users.guru.id,
+      questionType: QuestionType.TRUE_FALSE,
+      scoringMode: ScoringMode.PARTIAL_NO_PENALTY,
+      maxScore: 1,
+      questionText: "Tentukan benar atau salah untuk setiap pernyataan tentang susunan atom oksigen.",
+      questionHtml: "<p>Tentukan benar atau salah untuk setiap pernyataan tentang susunan atom oksigen.</p>",
+      explanation: "<p>Atom oksigen netral memiliki 8 proton dan 8 elektron. Jika nomor massanya 16, jumlah neutronnya 8. Susunan elektronnya 2 pada kulit K dan 6 pada kulit L.</p>",
+      difficulty: "Sedang",
+      status: PublishStatus.PUBLISHED,
+      stimulusOrder: 1,
+    },
+  });
+  await prisma.questionOption.deleteMany({ where: { questionId: question3.id } });
+  await prisma.questionOption.createMany({
+    data: [
+      { questionId: question3.id, label: "A", optionText: "Atom oksigen netral memiliki 8 elektron.", isCorrect: true },
+      { questionId: question3.id, label: "B", optionText: "Jika nomor massanya 16, atom oksigen memiliki 7 neutron.", isCorrect: false },
+      { questionId: question3.id, label: "C", optionText: "Kulit L pada atom oksigen berisi 6 elektron.", isCorrect: true },
     ],
   });
 
@@ -286,6 +337,7 @@ async function main() {
     data: [
       { tryoutId: tryout.id, questionId: question.id, orderNo: 1 },
       { tryoutId: tryout.id, questionId: question2.id, orderNo: 2 },
+      { tryoutId: tryout.id, questionId: question3.id, orderNo: 3 },
     ],
   });
 
