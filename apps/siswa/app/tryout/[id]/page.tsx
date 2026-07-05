@@ -20,7 +20,9 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
     redirect('/tryout');
   }
 
-  if (![TryoutStatus.OPEN, TryoutStatus.PAUSED, TryoutStatus.SCHEDULED].includes(tryout.status)) {
+  const allowedStatuses: TryoutStatus[] = [TryoutStatus.OPEN, TryoutStatus.PAUSED, TryoutStatus.SCHEDULED];
+
+  if (!allowedStatuses.includes(tryout.status)) {
     redirect('/tryout');
   }
 
