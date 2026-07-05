@@ -187,11 +187,6 @@ export function ExamMode({
   return (
     <div className="exam-focus-wrap">
       <div className="exam-header">
-        <div>
-          <div className="eyebrow">Mode CBT terkunci</div>
-          <strong>{tryoutTitle}</strong>
-          <div className="muted">Menu lain disembunyikan sampai tryout selesai.</div>
-        </div>
         <div className="exam-status-strip" aria-label="Status tryout">
           <div className="exam-status-track">
             <span className="badge">{timeText}</span>
