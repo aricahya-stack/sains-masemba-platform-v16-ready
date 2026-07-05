@@ -12,7 +12,7 @@ export default async function ProgresPage() {
           attempts: {
             include: {
               answers: {
-                include: { question: { include: { topic: true, options: true } }, selectedOption: true },
+                include: { question: { include: { topic: true } } },
               },
             },
           },
@@ -22,21 +22,21 @@ export default async function ProgresPage() {
   });
 
   const rows = links.flatMap((link) => {
-    const topicMap = new Map<string, { total: number; correct: number }>();
+    const topicMap = new Map<string, { total: number; earned: number; possible: number }>();
     for (const attempt of link.student.attempts) {
       for (const answer of attempt.answers) {
         const key = answer.question.topic.title;
-        const current = topicMap.get(key) || { total: 0, correct: 0 };
-        const correctOption = answer.question.options.find((option) => option.isCorrect);
+        const current = topicMap.get(key) || { total: 0, earned: 0, possible: 0 };
         current.total += 1;
-        if (correctOption && answer.selectedOptionId === correctOption.id) current.correct += 1;
+        current.earned += answer.score || 0;
+        current.possible += answer.question.maxScore || 1;
         topicMap.set(key, current);
       }
     }
     return Array.from(topicMap.entries()).map(([topic, data]) => ({
       studentName: link.student.fullName,
       topic,
-      accuracy: data.total ? Math.round((data.correct / data.total) * 100) : 0,
+      accuracy: data.possible ? Math.round((data.earned / data.possible) * 100) : 0,
       total: data.total,
     }));
   });
