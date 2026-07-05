@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma, QuestionType, UserRole } from '@sh/db';
 import { getCurrentUser } from '@sh/core';
-import { scoreQuestionAnswer } from '../../../../../lib/question-scoring';
+import { scoreQuestionAnswer, type AnswerValue } from '../../../../../lib/question-scoring';
 
 async function ensureStudent() {
   const user = await getCurrentUser();
@@ -32,13 +32,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   for (const row of attempt.tryout.questions) {
     const question = row.question;
     const answer = answerMap.get(question.id);
-    const value = !answer
+    const value: AnswerValue = (!answer
       ? null
       : question.questionType === QuestionType.TRUE_FALSE
         ? answer.trueFalseAnswers
         : question.questionType === QuestionType.MULTIPLE_CHOICE
           ? answer.selectedOptionIds
-          : answer.selectedOptionId;
+          : answer.selectedOptionId) as AnswerValue;
     const scored = scoreQuestionAnswer(question, value);
     earned += scored.score;
     possible += scored.maxScore;

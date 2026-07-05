@@ -1,0 +1,75 @@
+--- apps/siswa/lib/question-scoring.ts	2026-07-05 18:01:33.307481362 +0000
++++ /mnt/data/fixapp/sains-masemba-platform-v18-multi-soal/apps/siswa/lib/question-scoring.ts	2026-07-05 18:28:38.747841984 +0000
+@@ -16,7 +16,7 @@
+   options: ScoringOption[];
+ };
+ 
+-export type AnswerValue = string | string[] | Record<string, boolean | string | null | undefined> | null | undefined;
++export type AnswerValue = string | string[] | number | boolean | unknown[] | Record<string, unknown> | null | undefined;
+ 
+ export function questionTypeLabel(type: string | undefined) {
+   if (type === 'MULTIPLE_CHOICE') return 'Pilihan ganda kompleks';
+@@ -49,8 +49,8 @@
+ 
+ export function normalizeTrueFalseAnswers(answer: AnswerValue) {
+   const result: Record<string, boolean> = {};
+-  if (!answer || Array.isArray(answer) || typeof answer === 'string') return result;
+-  for (const [key, value] of Object.entries(answer)) {
++  if (!answer || Array.isArray(answer) || typeof answer !== 'object') return result;
++  for (const [key, value] of Object.entries(answer as Record<string, unknown>)) {
+     if (typeof value === 'boolean') result[key] = value;
+     if (typeof value === 'string') {
+       const normalized = value.toLowerCase();
+--- apps/siswa/app/api/attempts/[id]/submit/route.ts	2026-07-05 18:02:29.975224301 +0000
++++ /mnt/data/fixapp/sains-masemba-platform-v18-multi-soal/apps/siswa/app/api/attempts/[id]/submit/route.ts	2026-07-05 18:25:34.358628588 +0000
+@@ -1,7 +1,7 @@
+ import { NextResponse } from 'next/server';
+ import { prisma, QuestionType, UserRole } from '@sh/db';
+ import { getCurrentUser } from '@sh/core';
+-import { scoreQuestionAnswer } from '../../../../../lib/question-scoring';
++import { scoreQuestionAnswer, type AnswerValue } from '../../../../../lib/question-scoring';
+ 
+ async function ensureStudent() {
+   const user = await getCurrentUser();
+@@ -32,13 +32,13 @@
+   for (const row of attempt.tryout.questions) {
+     const question = row.question;
+     const answer = answerMap.get(question.id);
+-    const value = !answer
++    const value: AnswerValue = (!answer
+       ? null
+       : question.questionType === QuestionType.TRUE_FALSE
+         ? answer.trueFalseAnswers
+         : question.questionType === QuestionType.MULTIPLE_CHOICE
+           ? answer.selectedOptionIds
+-          : answer.selectedOptionId;
++          : answer.selectedOptionId) as AnswerValue;
+     const scored = scoreQuestionAnswer(question, value);
+     earned += scored.score;
+     possible += scored.maxScore;
+--- apps/siswa/app/pembahasan/page.tsx	2026-07-05 18:03:08.276737031 +0000
++++ /mnt/data/fixapp/sains-masemba-platform-v18-multi-soal/apps/siswa/app/pembahasan/page.tsx	2026-07-05 18:25:44.013106648 +0000
+@@ -11,6 +11,7 @@
+   scoreQuestionAnswer,
+   scoringModeLabel,
+   questionTypeLabel,
++  type AnswerValue,
+ } from '../../lib/question-scoring';
+ 
+ export default async function PembahasanPage({ searchParams }: { searchParams: Promise<{ attempt?: string }> }) {
+@@ -74,13 +75,13 @@
+   const rows = attempt.tryout.questions.map((row) => {
+     const question = row.question;
+     const answer = answerMap.get(question.id);
+-    const value = !answer
++    const value: AnswerValue = (!answer
+       ? null
+       : question.questionType === QuestionType.TRUE_FALSE
+         ? answer.trueFalseAnswers
+         : question.questionType === QuestionType.MULTIPLE_CHOICE
+           ? answer.selectedOptionIds
+-          : answer.selectedOptionId;
++          : answer.selectedOptionId) as AnswerValue;
+     const scored = scoreQuestionAnswer(question, value);
+     return { row, question, answer, value, scored, isCorrect: scored.isCorrect };
+   });

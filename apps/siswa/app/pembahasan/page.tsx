@@ -11,6 +11,7 @@ import {
   scoreQuestionAnswer,
   scoringModeLabel,
   questionTypeLabel,
+  type AnswerValue,
 } from '../../lib/question-scoring';
 
 export default async function PembahasanPage({ searchParams }: { searchParams: Promise<{ attempt?: string }> }) {
@@ -74,13 +75,13 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
   const rows = attempt.tryout.questions.map((row) => {
     const question = row.question;
     const answer = answerMap.get(question.id);
-    const value = !answer
+    const value: AnswerValue = (!answer
       ? null
       : question.questionType === QuestionType.TRUE_FALSE
         ? answer.trueFalseAnswers
         : question.questionType === QuestionType.MULTIPLE_CHOICE
           ? answer.selectedOptionIds
-          : answer.selectedOptionId;
+          : answer.selectedOptionId) as AnswerValue;
     const scored = scoreQuestionAnswer(question, value);
     return { row, question, answer, value, scored, isCorrect: scored.isCorrect };
   });

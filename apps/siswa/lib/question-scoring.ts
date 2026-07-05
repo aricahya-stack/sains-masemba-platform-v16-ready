@@ -16,7 +16,7 @@ export type ScoringQuestion = {
   options: ScoringOption[];
 };
 
-export type AnswerValue = string | string[] | Record<string, boolean | string | null | undefined> | null | undefined;
+export type AnswerValue = string | string[] | number | boolean | unknown[] | Record<string, unknown> | null | undefined;
 
 export function questionTypeLabel(type: string | undefined) {
   if (type === 'MULTIPLE_CHOICE') return 'Pilihan ganda kompleks';
@@ -49,8 +49,8 @@ export function normalizeSelectedIds(answer: AnswerValue) {
 
 export function normalizeTrueFalseAnswers(answer: AnswerValue) {
   const result: Record<string, boolean> = {};
-  if (!answer || Array.isArray(answer) || typeof answer === 'string') return result;
-  for (const [key, value] of Object.entries(answer)) {
+  if (!answer || Array.isArray(answer) || typeof answer !== 'object') return result;
+  for (const [key, value] of Object.entries(answer as Record<string, unknown>)) {
     if (typeof value === 'boolean') result[key] = value;
     if (typeof value === 'string') {
       const normalized = value.toLowerCase();
