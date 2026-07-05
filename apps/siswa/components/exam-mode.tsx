@@ -1,4 +1,5 @@
 'use client';
+import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { Flag, Type } from 'lucide-react';
 import { useToast } from './toast-provider';
@@ -189,6 +190,16 @@ export function ExamMode({
       <div className="exam-header">
         <div className="exam-status-strip" aria-label="Status tryout">
           <div className="exam-status-track">
+            <span className="exam-status-logo" aria-label="Logo Sains Masemba">
+              <Image
+                src="/sains-masemba-icon.svg"
+                alt=""
+                width={32}
+                height={32}
+                priority
+                className="exam-status-logo-img"
+              />
+            </span>
             <span className="badge">{timeText}</span>
             <span className="badge success">Dijawab {answeredCount}</span>
             <span className="badge warning">Ragu {doubtCount}</span>
