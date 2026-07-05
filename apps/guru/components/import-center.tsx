@@ -38,7 +38,7 @@ export function ImportCenter({ eyebrow, title, description, templates }: { eyebr
         <div><div className="eyebrow">Preview import</div><strong>Unggah file Excel</strong><p className="muted">Sistem membaca workbook lalu menampilkan preview awal.</p></div>
         <input className="input" type="file" accept=".xlsx,.xls" onChange={(event) => onFile(event.target.files?.[0] || null)} />
         <div className="notice">{summary}</div>
-        <div className="table-list">{rows.map((row, index) => <div className="item-card" key={index}><div className="kv-list">{Object.entries(row).slice(0, 8).map(([key, value]) => <div key={key}><strong>{key}</strong><span>{String(value)}</span></div>)}</div></div>)}</div>
+        <div className="table-list">{rows.map((row, index) => <div className="item-card" key={index}><div className="kv-list">{Object.entries(row).slice(0, 12).map(([key, value]) => <div key={key}><strong>{key}</strong><span>{String(value)}</span></div>)}</div></div>)}</div>
       </section>
     </div>
   );

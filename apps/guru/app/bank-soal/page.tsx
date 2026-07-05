@@ -30,15 +30,25 @@ export default async function BankSoalPage({ searchParams }: { searchParams: Pro
     { name: 'blueprintId', label: 'Kode kisi-kisi', type: 'select', options: [{ value: '', label: 'Tanpa kisi-kisi' }, ...blueprints.map((bp) => ({ value: bp.id, label: `${bp.code}${bp.testGroup ? ` • ${bp.testGroup}` : ''}` }))] },
     { name: 'difficulty', label: 'Kesulitan', type: 'select', options: ['Mudah', 'Sedang', 'Sulit'] },
     { name: 'status', label: 'Status', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
+    { name: 'questionType', label: 'Jenis soal', type: 'select', options: [
+      { value: 'SINGLE_CHOICE', label: 'Pilihan ganda biasa' },
+      { value: 'MULTIPLE_CHOICE', label: 'Pilihan ganda kompleks' },
+      { value: 'TRUE_FALSE', label: 'Benar atau salah' },
+    ] },
+    { name: 'scoringMode', label: 'Sistem penilaian', type: 'select', options: [
+      { value: 'EXACT_MATCH', label: 'Exact match' },
+      { value: 'PARTIAL_NO_PENALTY', label: 'Parsial tanpa penalti' },
+    ] },
+    { name: 'maxScore', label: 'Bobot soal' },
     { name: 'stimulusOrder', label: 'Urutan stimulus' },
-    { name: 'questionHtml', label: 'Soal (HTML / LaTeX)', type: 'richtext' },
+    { name: 'questionHtml', label: 'Soal / stimulus (HTML / LaTeX)', type: 'richtext' },
     { name: 'explanation', label: 'Pembahasan', type: 'richtext' },
-    { name: 'optionA', label: 'Opsi A', type: 'textarea' },
-    { name: 'optionB', label: 'Opsi B', type: 'textarea' },
-    { name: 'optionC', label: 'Opsi C', type: 'textarea' },
-    { name: 'optionD', label: 'Opsi D', type: 'textarea' },
-    { name: 'optionE', label: 'Opsi E (opsional)', type: 'textarea' },
-    { name: 'correctOption', label: 'Kunci jawaban', type: 'select', options: ['A', 'B', 'C', 'D', 'E'] },
+    { name: 'optionA', label: 'Opsi A / Pernyataan 1', type: 'textarea' },
+    { name: 'optionB', label: 'Opsi B / Pernyataan 2', type: 'textarea' },
+    { name: 'optionC', label: 'Opsi C / Pernyataan 3', type: 'textarea' },
+    { name: 'optionD', label: 'Opsi D / Pernyataan 4', type: 'textarea' },
+    { name: 'optionE', label: 'Opsi E / Pernyataan 5 (opsional)', type: 'textarea' },
+    { name: 'correctAnswers', label: 'Kunci jawaban. PG: A. Kompleks: A,C,D. Benar Salah: B,S,B' },
   ];
 
   const initialRows = selectedQuestions.map((question) => {
@@ -51,6 +61,9 @@ export default async function BankSoalPage({ searchParams }: { searchParams: Pro
       difficulty: question.difficulty || '',
       status: question.status,
       stimulusOrder: String(question.stimulusOrder),
+      questionType: question.questionType,
+      scoringMode: question.scoringMode,
+      maxScore: String(question.maxScore || 1),
       questionHtml: question.questionHtml || question.questionText,
       explanation: question.explanation || '',
       optionA: byLabel.A || '',
@@ -58,7 +71,9 @@ export default async function BankSoalPage({ searchParams }: { searchParams: Pro
       optionC: byLabel.C || '',
       optionD: byLabel.D || '',
       optionE: byLabel.E || '',
-      correctOption: question.options.find((item) => item.isCorrect)?.label || '',
+      correctAnswers: question.questionType === 'TRUE_FALSE'
+        ? question.options.map((item) => (item.isCorrect ? 'B' : 'S')).join(',')
+        : question.options.filter((item) => item.isCorrect).map((item) => item.label).join(','),
     };
   });
 
@@ -85,7 +100,7 @@ export default async function BankSoalPage({ searchParams }: { searchParams: Pro
       <EditableManager
         eyebrow="Bank soal"
         title={selectedTryout ? `Kelola soal ${selectedTryout.title}` : 'Kelola soal'}
-        description="Soal tetap dapat dibuat dan diedit, tetapi tampilan awal bank soal sekarang dikelompokkan berdasarkan nama tryout."
+        description="Soal dapat dibuat dalam format pilihan ganda biasa, pilihan ganda kompleks, serta benar atau salah. Penilaian dapat memakai exact match atau parsial tanpa penalti."
         entityName="soal"
         endpoint="/api/questions"
         fields={fields}
@@ -94,6 +109,8 @@ export default async function BankSoalPage({ searchParams }: { searchParams: Pro
           { key: 'code', label: 'Kode soal' },
           { key: 'topicId', label: 'Topik' },
           { key: 'blueprintId', label: 'Kisi-kisi' },
+          { key: 'questionType', label: 'Jenis' },
+          { key: 'scoringMode', label: 'Penilaian' },
           { key: 'difficulty', label: 'Kesulitan' },
           { key: 'status', label: 'Status' },
         ]}
