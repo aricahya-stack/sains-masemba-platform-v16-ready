@@ -1145,3 +1145,16 @@ body { font-family: var(--app-font, Inter, ui-sans-serif, system-ui, -apple-syst
     flex: 1;
   }
 }
+
+/* Multi-format question support */
+.checkbox-mark { display: inline-flex; min-width: 24px; font-weight: 700; }
+.tf-list { display: grid; gap: 12px; }
+.tf-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--border); border-radius: 16px; background: color-mix(in srgb, var(--surface) 92%, white); }
+.tf-statement { display: flex; gap: 8px; align-items: flex-start; min-width: 0; }
+.tf-statement .math-html, .tf-statement p { margin: 0; }
+.tf-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.review-tf-list .tf-row { background: color-mix(in srgb, var(--surface) 96%, white); }
+@media (max-width: 760px) {
+  .tf-row { grid-template-columns: 1fr; }
+  .tf-actions { justify-content: flex-start; }
+}

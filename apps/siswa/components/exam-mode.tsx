@@ -4,13 +4,24 @@ import { useEffect, useMemo, useState } from 'react';
 import { Flag, Type } from 'lucide-react';
 import { useToast } from './toast-provider';
 import { MathHtml } from './math-html';
+import {
+  type AnswerValue,
+  isAnswered,
+  normalizeSelectedIds,
+  normalizeTrueFalseAnswers,
+  questionTypeLabel,
+  scoringModeLabel,
+} from '../lib/question-scoring';
 
 type ExamQuestion = {
   id: string;
   code: string;
   html: string;
   explanation: string;
-  options: { id: string; label: string; text: string }[];
+  questionType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+  scoringMode: 'EXACT_MATCH' | 'PARTIAL_NO_PENALTY';
+  maxScore: number;
+  options: { id: string; label: string; text: string; isCorrect: boolean }[];
 };
 
 type FontSize = 'small' | 'normal' | 'large';
@@ -28,12 +39,12 @@ export function ExamMode({
   tryoutTitle: string;
   durationMinutes: number;
   initialWarnings: number;
-  initialAnswers: Record<string, string>;
+  initialAnswers: Record<string, AnswerValue>;
   questions: ExamQuestion[];
 }) {
   const { notify } = useToast();
   const [current, setCurrent] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers);
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>(initialAnswers);
   const [doubts, setDoubts] = useState<Record<string, boolean>>({});
   const [warnings, setWarnings] = useState(initialWarnings);
   const [seconds, setSeconds] = useState(durationMinutes * 60);
@@ -41,7 +52,7 @@ export function ExamMode({
   const [fontSize, setFontSize] = useState<FontSize>('normal');
 
   const currentQuestion = questions[current];
-  const answeredCount = questions.filter((question) => answers[question.id]).length;
+  const answeredCount = questions.filter((question) => isAnswered(question, answers[question.id])).length;
   const doubtCount = questions.filter((question) => doubts[question.id]).length;
   const unansweredCount = questions.length - answeredCount;
 
@@ -123,12 +134,28 @@ export function ExamMode({
 
   const timeText = useMemo(() => `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`, [seconds]);
 
-  async function saveAnswer(questionId: string, selectedOptionId: string) {
-    setAnswers((prev) => ({ ...prev, [questionId]: selectedOptionId }));
+  async function saveAnswer(question: ExamQuestion, answerValue: AnswerValue) {
+    setAnswers((prev) => ({ ...prev, [question.id]: answerValue }));
+    const body: Record<string, unknown> = { questionId: question.id };
+    if (question.questionType === 'TRUE_FALSE') {
+      body.trueFalseAnswers = answerValue || {};
+      body.selectedOptionId = null;
+      body.selectedOptionIds = [];
+    } else if (question.questionType === 'MULTIPLE_CHOICE') {
+      body.selectedOptionIds = normalizeSelectedIds(answerValue);
+      body.selectedOptionId = null;
+      body.trueFalseAnswers = null;
+    } else {
+      const selected = normalizeSelectedIds(answerValue)[0] || null;
+      body.selectedOptionId = selected;
+      body.selectedOptionIds = selected ? [selected] : [];
+      body.trueFalseAnswers = null;
+    }
+
     const response = await fetch(`/api/attempts/${attemptId}/answer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ questionId, selectedOptionId }),
+      body: JSON.stringify(body),
     });
     const payload = await response.json();
     if (!response.ok) {
@@ -136,6 +163,24 @@ export function ExamMode({
       return;
     }
     notify('Sudah tersimpan', 'Jawaban tersimpan otomatis.');
+  }
+
+  function chooseSingle(question: ExamQuestion, optionId: string) {
+    saveAnswer(question, optionId);
+  }
+
+  function toggleMultiple(question: ExamQuestion, optionId: string) {
+    const selected = new Set(normalizeSelectedIds(answers[question.id]));
+    if (selected.has(optionId)) selected.delete(optionId);
+    else selected.add(optionId);
+    saveAnswer(question, Array.from(selected));
+  }
+
+  function chooseTrueFalse(question: ExamQuestion, optionId: string, value: boolean) {
+    saveAnswer(question, {
+      ...normalizeTrueFalseAnswers(answers[question.id]),
+      [optionId]: value,
+    });
   }
 
   async function registerWarning(type: string, message: string) {
@@ -161,7 +206,7 @@ export function ExamMode({
     if (submitted) return;
     if (!auto) {
       const message = unansweredCount > 0
-        ? `Masih ada ${unansweredCount} soal yang belum dijawab. Tetap selesaikan tryout?`
+        ? `Masih ada ${unansweredCount} soal yang belum dijawab lengkap. Tetap selesaikan tryout?`
         : 'Semua soal sudah dijawab. Apakah Anda yakin ingin menyelesaikan tryout?';
       if (!window.confirm(message)) return;
     }
@@ -185,6 +230,10 @@ export function ExamMode({
     return <div className="empty-state">Belum ada soal pada tryout ini.</div>;
   }
 
+  const selectedIds = new Set(normalizeSelectedIds(answers[currentQuestion.id]));
+  const trueFalseMap = normalizeTrueFalseAnswers(answers[currentQuestion.id]);
+  const currentAnswered = isAnswered(currentQuestion, answers[currentQuestion.id]);
+
   return (
     <div className="exam-focus-wrap">
       <div className="exam-header">
@@ -200,6 +249,7 @@ export function ExamMode({
                 className="exam-status-logo-img"
               />
             </span>
+            <span className="badge">{tryoutTitle}</span>
             <span className="badge">{timeText}</span>
             <span className="badge success">Dijawab {answeredCount}</span>
             <span className="badge warning">Ragu {doubtCount}</span>
@@ -213,6 +263,10 @@ export function ExamMode({
             <div>
               <strong>Soal {current + 1} dari {questions.length}</strong>
               <div className="muted">{currentQuestion.code}</div>
+              <div className="inline-group" style={{ marginTop: 8 }}>
+                <span className="badge">{questionTypeLabel(currentQuestion.questionType)}</span>
+                <span className="badge">{scoringModeLabel(currentQuestion.scoringMode)}</span>
+              </div>
             </div>
             <div className="inline-group">
               <div className="font-size-controls" aria-label="Ukuran font soal">
@@ -221,7 +275,7 @@ export function ExamMode({
                 <button type="button" className={fontSize === 'normal' ? 'active' : ''} onClick={() => setFontSize('normal')}>A</button>
                 <button type="button" className={fontSize === 'large' ? 'active' : ''} onClick={() => setFontSize('large')}>A</button>
               </div>
-              {answers[currentQuestion.id] ? (
+              {currentAnswered ? (
                 <button className={`button-secondary${doubts[currentQuestion.id] ? ' active' : ''}`} type="button" onClick={() => toggleDoubt(currentQuestion.id)}>
                   <Flag size={15} />
                   Ragu-ragu
@@ -231,19 +285,62 @@ export function ExamMode({
             </div>
           </div>
           <MathHtml html={currentQuestion.html} className="exam-question-text" />
-          <div className="stack">
-            {currentQuestion.options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`button-secondary exam-option${answers[currentQuestion.id] === option.id ? ' selected' : ''}`}
-                onClick={() => saveAnswer(currentQuestion.id, option.id)}
-              >
-                <strong>{option.label}.</strong>
-                <MathHtml html={option.text} />
-              </button>
-            ))}
-          </div>
+
+          {currentQuestion.questionType === 'TRUE_FALSE' ? (
+            <div className="tf-list">
+              {currentQuestion.options.map((option, index) => (
+                <div className="tf-row" key={option.id}>
+                  <div className="tf-statement"><strong>{index + 1}.</strong> <MathHtml html={option.text} /></div>
+                  <div className="tf-actions">
+                    <button
+                      type="button"
+                      className={`button-secondary${trueFalseMap[option.id] === true ? ' active' : ''}`}
+                      onClick={() => chooseTrueFalse(currentQuestion, option.id, true)}
+                    >
+                      Benar
+                    </button>
+                    <button
+                      type="button"
+                      className={`button-secondary${trueFalseMap[option.id] === false ? ' active' : ''}`}
+                      onClick={() => chooseTrueFalse(currentQuestion, option.id, false)}
+                    >
+                      Salah
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : currentQuestion.questionType === 'MULTIPLE_CHOICE' ? (
+            <div className="stack">
+              {currentQuestion.options.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`button-secondary exam-option${selectedIds.has(option.id) ? ' selected' : ''}`}
+                  onClick={() => toggleMultiple(currentQuestion, option.id)}
+                >
+                  <span className="checkbox-mark">{selectedIds.has(option.id) ? '☑' : '☐'}</span>
+                  <strong>{option.label}.</strong>
+                  <MathHtml html={option.text} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="stack">
+              {currentQuestion.options.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`button-secondary exam-option${selectedIds.has(option.id) ? ' selected' : ''}`}
+                  onClick={() => chooseSingle(currentQuestion, option.id)}
+                >
+                  <strong>{option.label}.</strong>
+                  <MathHtml html={option.text} />
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="inline-group">
             <button className="button-secondary" type="button" onClick={() => setCurrent((prev) => Math.max(0, prev - 1))}>Sebelumnya</button>
             <button className="button" type="button" onClick={() => setCurrent((prev) => Math.min(questions.length - 1, prev + 1))}>Selanjutnya</button>
@@ -256,14 +353,14 @@ export function ExamMode({
           </div>
           <div className="question-nav">
             {questions.map((question, index) => {
-              const state = doubts[question.id] ? 'doubt' : answers[question.id] ? 'answered' : 'unanswered';
+              const state = doubts[question.id] ? 'doubt' : isAnswered(question, answers[question.id]) ? 'answered' : 'unanswered';
               return (
                 <button
                   key={question.id}
                   type="button"
                   className={`${state}${current === index ? ' active' : ''}`}
                   onClick={() => setCurrent(index)}
-                  title={state === 'doubt' ? 'Ragu-ragu' : state === 'answered' ? 'Sudah dikerjakan' : 'Belum dikerjakan'}
+                  title={state === 'doubt' ? 'Ragu-ragu' : state === 'answered' ? 'Sudah dikerjakan lengkap' : 'Belum dikerjakan lengkap'}
                 >
                   {index + 1}
                 </button>

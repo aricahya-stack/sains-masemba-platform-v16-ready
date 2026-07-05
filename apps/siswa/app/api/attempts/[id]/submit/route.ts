@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
-import { prisma, UserRole } from '@sh/db';
+import { prisma, QuestionType, UserRole } from '@sh/db';
 import { getCurrentUser } from '@sh/core';
+import { scoreQuestionAnswer } from '../../../../../lib/question-scoring';
 
 async function ensureStudent() {
   const user = await getCurrentUser();
@@ -15,24 +16,42 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const attempt = await prisma.attempt.findUnique({
     where: { id },
     include: {
-      answers: { include: { selectedOption: true, question: { include: { options: true } } } },
-      tryout: { include: { questions: true } },
+      answers: { include: { selectedOption: true, question: { include: { options: { orderBy: { label: 'asc' } } } } } },
+      tryout: { include: { questions: { include: { question: { include: { options: { orderBy: { label: 'asc' } } } } } } } },
     },
   });
   if (!attempt || attempt.userId !== user.id || attempt.submittedAt) {
     return NextResponse.json({ error: 'Attempt tidak valid.' }, { status: 404 });
   }
 
-  const totalQuestions = attempt.tryout.questions.length || 1;
-  let correct = 0;
-  for (const answer of attempt.answers) {
-    const correctOption = answer.question.options.find((option) => option.isCorrect);
-    if (correctOption && answer.selectedOptionId === correctOption.id) {
-      correct += 1;
+  const answerMap = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
+  let earned = 0;
+  let possible = 0;
+  const answerUpdates: Array<Promise<unknown>> = [];
+
+  for (const row of attempt.tryout.questions) {
+    const question = row.question;
+    const answer = answerMap.get(question.id);
+    const value = !answer
+      ? null
+      : question.questionType === QuestionType.TRUE_FALSE
+        ? answer.trueFalseAnswers
+        : question.questionType === QuestionType.MULTIPLE_CHOICE
+          ? answer.selectedOptionIds
+          : answer.selectedOptionId;
+    const scored = scoreQuestionAnswer(question, value);
+    earned += scored.score;
+    possible += scored.maxScore;
+    if (answer) {
+      answerUpdates.push(prisma.attemptAnswer.update({
+        where: { id: answer.id },
+        data: { score: scored.score, isCorrect: scored.isCorrect, answeredAt: new Date() },
+      }));
     }
   }
 
-  const score = (correct / totalQuestions) * 100;
+  if (answerUpdates.length) await Promise.all(answerUpdates);
+  const score = possible ? (earned / possible) * 100 : 0;
 
   const updated = await prisma.attempt.update({
     where: { id },

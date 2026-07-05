@@ -1,4 +1,4 @@
-import { prisma, TryoutStatus, UserRole } from '@sh/db';
+import { prisma, QuestionType, TryoutStatus, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
 import { ExamMode } from '../../../components/exam-mode';
 import { redirect } from 'next/navigation';
@@ -42,16 +42,26 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
     });
   }
 
-  const initialAnswers = Object.fromEntries(attempt.answers.map((answer) => [answer.questionId, answer.selectedOptionId || '']));
+  const questionTypeMap = new Map(tryout.questions.map((row) => [row.question.id, row.question.questionType]));
+  const initialAnswers = Object.fromEntries(attempt.answers.map((answer) => {
+    const questionType = questionTypeMap.get(answer.questionId);
+    if (questionType === QuestionType.TRUE_FALSE) return [answer.questionId, answer.trueFalseAnswers || {}];
+    if (questionType === QuestionType.MULTIPLE_CHOICE) return [answer.questionId, answer.selectedOptionIds || []];
+    return [answer.questionId, answer.selectedOptionId || answer.selectedOptionIds[0] || ''];
+  }));
   const questions = tryout.questions.map((row) => ({
     id: row.question.id,
     code: row.question.code,
     html: row.question.questionHtml || row.question.questionText,
     explanation: row.question.explanation || '',
+    questionType: row.question.questionType,
+    scoringMode: row.question.scoringMode,
+    maxScore: row.question.maxScore || 1,
     options: row.question.options.map((option) => ({
       id: option.id,
       label: option.label,
       text: option.optionText,
+      isCorrect: option.isCorrect,
     })),
   }));
 

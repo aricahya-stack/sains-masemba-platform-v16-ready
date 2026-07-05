@@ -1,9 +1,17 @@
 import Link from 'next/link';
-import { prisma, UserRole } from '@sh/db';
+import { prisma, QuestionType, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
 import { PageHero } from '../../components/page-hero';
 import { MathHtml } from '../../components/math-html';
 import { ExplanationTools } from '../../components/explanation-tools';
+import {
+  formatCorrectAnswer,
+  formatStudentAnswer,
+  normalizeTrueFalseAnswers,
+  scoreQuestionAnswer,
+  scoringModeLabel,
+  questionTypeLabel,
+} from '../../lib/question-scoring';
 
 export default async function PembahasanPage({ searchParams }: { searchParams: Promise<{ attempt?: string }> }) {
   const user = await requireRole(UserRole.SISWA);
@@ -66,9 +74,15 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
   const rows = attempt.tryout.questions.map((row) => {
     const question = row.question;
     const answer = answerMap.get(question.id);
-    const correct = question.options.find((option) => option.isCorrect) || null;
-    const isCorrect = Boolean(correct && answer?.selectedOptionId === correct.id);
-    return { row, question, answer, correct, isCorrect };
+    const value = !answer
+      ? null
+      : question.questionType === QuestionType.TRUE_FALSE
+        ? answer.trueFalseAnswers
+        : question.questionType === QuestionType.MULTIPLE_CHOICE
+          ? answer.selectedOptionIds
+          : answer.selectedOptionId;
+    const scored = scoreQuestionAnswer(question, value);
+    return { row, question, answer, value, scored, isCorrect: scored.isCorrect };
   });
   const correctCount = rows.filter((row) => row.isCorrect).length;
   const wrongCount = rows.length - correctCount;
@@ -78,7 +92,7 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
       <PageHero
         eyebrow="Pembahasan"
         title={attempt.tryout.title}
-        description={`Skor ${attempt.score.toFixed(0)} • Benar ${correctCount} • Salah ${wrongCount} • Warning ${attempt.warnings}`}
+        description={`Skor ${attempt.score.toFixed(0)} • Benar penuh ${correctCount} • Belum tepat ${wrongCount} • Warning ${attempt.warnings}`}
         actions={<Link className="button-secondary" href="/pembahasan">Kembali ke daftar</Link>}
       />
       <section className="card stack">
@@ -88,8 +102,8 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
             <strong>Benar dan salah</strong>
           </div>
           <div className="legend-list horizontal">
-            <span><i className="legend correct" /> Benar</span>
-            <span><i className="legend wrong" /> Salah / kosong</span>
+            <span><i className="legend correct" /> Benar penuh</span>
+            <span><i className="legend wrong" /> Salah / parsial / kosong</span>
           </div>
         </div>
         <div className="question-nav review-nav">
@@ -103,21 +117,46 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
           <div className="item-head">
             <div>
               <strong>{index + 1}. {item.question.code}</strong>
-              <div className="muted">{item.isCorrect ? 'Jawaban benar' : 'Jawaban salah atau belum dijawab'}</div>
+              <div className="muted">{item.isCorrect ? 'Jawaban benar penuh' : 'Jawaban salah, parsial, atau belum dijawab'}</div>
+              <div className="inline-group" style={{ marginTop: 8 }}>
+                <span className="badge">{questionTypeLabel(item.question.questionType)}</span>
+                <span className="badge">{scoringModeLabel(item.question.scoringMode)}</span>
+                <span className="badge">Skor {item.scored.score.toFixed(2)} / {item.scored.maxScore.toFixed(2)}</span>
+              </div>
             </div>
-            <span className={`badge${item.isCorrect ? ' success' : ' danger'}`}>{item.isCorrect ? 'Benar' : 'Salah'}</span>
+            <span className={`badge${item.isCorrect ? ' success' : ' danger'}`}>{item.isCorrect ? 'Benar' : 'Belum tepat'}</span>
           </div>
           <MathHtml html={item.question.questionHtml || item.question.questionText} />
-          <div className="grid-2 compact-grid">
-            <div className="item-card">
-              <strong>Jawaban kamu</strong>
-              <div>{item.answer?.selectedOption?.label || '-'} {item.answer?.selectedOption ? `• ${item.answer.selectedOption.optionText.replace(/<[^>]+>/g, ' ')}` : ''}</div>
+          {item.question.questionType === QuestionType.TRUE_FALSE ? (
+            <div className="tf-list review-tf-list">
+              {item.question.options.map((option, optionIndex) => {
+                const answerMapValue = normalizeTrueFalseAnswers(item.value);
+                const hasAnswer = Object.prototype.hasOwnProperty.call(answerMapValue, option.id);
+                const userValue = hasAnswer ? answerMapValue[option.id] : null;
+                const ok = hasAnswer && userValue === option.isCorrect;
+                return (
+                  <div className="tf-row" key={option.id}>
+                    <div className="tf-statement"><strong>{optionIndex + 1}.</strong> <MathHtml html={option.optionText} /></div>
+                    <div className="tf-actions">
+                      <span className={`badge${ok ? ' success' : ' danger'}`}>Kamu: {hasAnswer ? (userValue ? 'Benar' : 'Salah') : '-'}</span>
+                      <span className="badge">Kunci: {option.isCorrect ? 'Benar' : 'Salah'}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <div className="item-card">
-              <strong>Jawaban benar</strong>
-              <div>{item.correct?.label || '-'} {item.correct ? `• ${item.correct.optionText.replace(/<[^>]+>/g, ' ')}` : ''}</div>
+          ) : (
+            <div className="grid-2 compact-grid">
+              <div className="item-card">
+                <strong>Jawaban kamu</strong>
+                <div>{formatStudentAnswer(item.question, item.value)}</div>
+              </div>
+              <div className="item-card">
+                <strong>Jawaban benar</strong>
+                <div>{formatCorrectAnswer(item.question)}</div>
+              </div>
             </div>
-          </div>
+          )}
           <ExplanationTools html={item.question.explanation || '<p>Belum ada pembahasan.</p>'} />
         </article>
       ))}
