@@ -2,6 +2,7 @@ import type { NavItem } from '../components/app-shell';
 
 export const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/', section: 'Utama', icon: 'LayoutDashboard' },
+  { label: 'Profil', href: '/profil', section: 'Utama', icon: 'User' },
   { label: 'User', href: '/users', section: 'Manajemen', icon: 'Users' },
   { label: 'Guru', href: '/guru', section: 'Manajemen', icon: 'GraduationCap' },
   { label: 'Siswa', href: '/siswa', section: 'Manajemen', icon: 'BookUser' },

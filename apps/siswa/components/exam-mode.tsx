@@ -67,6 +67,9 @@ export function ExamMode({
   }, [submitted]);
 
   useEffect(() => {
+    document.documentElement.classList.add('exam-lock-active');
+    document.body.classList.add('exam-lock-active');
+
     const onVisibility = () => {
       if (!document.hidden) {
         registerWarning('TAB_SWITCH', 'Terdeteksi berpindah tab atau kehilangan fokus.');
@@ -74,7 +77,22 @@ export function ExamMode({
     };
     const prevent = (event: Event) => {
       event.preventDefault();
-      notify('Aksi diblokir', 'Copy, paste, cut, dan klik kanan dibatasi selama tryout.');
+      notify('Aksi diblokir', 'Copy, paste, cut, seleksi teks, drag, dan klik kanan dibatasi selama tryout.');
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const blockedCombo = (event.ctrlKey || event.metaKey) && ['a', 'c', 'v', 'x', 'p', 's', 'u'].includes(key);
+      const blockedKey = event.key === 'PrintScreen' || event.key === 'F12';
+      if (!blockedCombo && !blockedKey) return;
+      event.preventDefault();
+      if (event.key === 'PrintScreen' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText('').catch(() => {});
+      }
+      registerWarning('BLOCKED_ACTION', 'Terdeteksi percobaan shortcut, print screen, atau inspeksi halaman.');
+      notify('Aksi diblokir', 'Shortcut, print screen, dan inspeksi halaman dibatasi selama tryout.');
+    };
+    const onBeforePrint = () => {
+      registerWarning('PRINT_ATTEMPT', 'Terdeteksi percobaan mencetak halaman tryout.');
     };
 
     document.addEventListener('visibilitychange', onVisibility);
@@ -82,13 +100,23 @@ export function ExamMode({
     document.addEventListener('paste', prevent);
     document.addEventListener('cut', prevent);
     document.addEventListener('contextmenu', prevent);
+    document.addEventListener('selectstart', prevent);
+    document.addEventListener('dragstart', prevent);
+    document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('beforeprint', onBeforePrint);
 
     return () => {
+      document.documentElement.classList.remove('exam-lock-active');
+      document.body.classList.remove('exam-lock-active');
       document.removeEventListener('visibilitychange', onVisibility);
       document.removeEventListener('copy', prevent);
       document.removeEventListener('paste', prevent);
       document.removeEventListener('cut', prevent);
       document.removeEventListener('contextmenu', prevent);
+      document.removeEventListener('selectstart', prevent);
+      document.removeEventListener('dragstart', prevent);
+      document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('beforeprint', onBeforePrint);
     };
   }, [attemptId, notify]);
 
@@ -164,11 +192,13 @@ export function ExamMode({
           <strong>{tryoutTitle}</strong>
           <div className="muted">Menu lain disembunyikan sampai tryout selesai.</div>
         </div>
-        <div className="inline-group">
-          <span className="badge">{timeText}</span>
-          <span className="badge success">Dijawab {answeredCount}</span>
-          <span className="badge warning">Ragu {doubtCount}</span>
-          <span className={`badge${warnings > 0 ? ' warning' : ''}`}>Warning {warnings}</span>
+        <div className="exam-status-strip" aria-label="Status tryout">
+          <div className="exam-status-track">
+            <span className="badge">{timeText}</span>
+            <span className="badge success">Dijawab {answeredCount}</span>
+            <span className="badge warning">Ragu {doubtCount}</span>
+            <span className={`badge${warnings > 0 ? ' warning' : ''}`}>Warning {warnings}</span>
+          </div>
         </div>
       </div>
       <div className="exam-shell">
@@ -240,7 +270,7 @@ export function ExamMode({
             <span><i className="legend doubt" /> Ragu-ragu</span>
           </div>
           <div className="notice">
-            Sistem memantau perpindahan tab, memblok copy/paste, dan mencatat warning secara real-time.
+            Sistem memantau perpindahan tab, memblok copy/paste, membatasi seleksi teks, dan mencatat warning secara real-time.
           </div>
         </aside>
       </div>

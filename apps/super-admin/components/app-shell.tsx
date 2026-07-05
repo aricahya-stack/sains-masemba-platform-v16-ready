@@ -45,6 +45,7 @@ export type NavItem = { label: string; href: string; section?: string; icon?: st
 export type LoginHighlight = { title: string; text: string };
 
 const iconMap = {
+  User,
   LayoutDashboard,
   Users,
   GraduationCap,
@@ -240,8 +241,17 @@ export function AppShell({
             <div className="sidebar-user-main">
               <div className="sidebar-user-avatar" aria-hidden="true"><User size={21} strokeWidth={2.4} /></div>
               <div className="sidebar-user-body">
-                <strong>{currentUser ? currentUser.fullName : 'Mode tamu'}</strong>
-                <small>{currentUser ? currentUser.role : 'Belum login'}</small>
+                {currentUser ? (
+                  <Link className="sidebar-profile-link" href="/profil" prefetch={false} title="Buka profil">
+                    <strong>{currentUser.fullName}</strong>
+                    <small>{currentUser.role}</small>
+                  </Link>
+                ) : (
+                  <>
+                    <strong>Mode tamu</strong>
+                    <small>Belum login</small>
+                  </>
+                )}
                 {currentUser ? (
                   <Link className="sidebar-logout" href="/logout" prefetch={false}>
                     <LogOut size={15} />

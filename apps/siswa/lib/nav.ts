@@ -7,5 +7,6 @@ export const navItems: NavItem[] = [
   { label: 'Tryout', href: '/tryout', section: 'Ujian', icon: 'ClipboardPenLine' },
   { label: 'Hasil', href: '/hasil', section: 'Ujian', icon: 'ChartColumnBig' },
   { label: 'Pembahasan', href: '/pembahasan', section: 'Ujian', icon: 'MessageCircleMore' },
+  { label: 'Profil', href: '/profil', section: 'Akun', icon: 'User' },
   { label: 'Pengembang', href: '/pengembang', section: 'Info', icon: 'Code2' },
 ];

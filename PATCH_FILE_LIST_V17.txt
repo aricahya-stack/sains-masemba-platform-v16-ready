@@ -1,0 +1,36 @@
+PATCH V17 Profil dan Tryout Mobile
+Cara pakai: salin folder apps dan packages ke root project, lalu timpa file lama jika diminta.
+
+File baru:
+- apps/guru/app/api/profile/password/route.ts
+- apps/guru/app/profil/page.tsx
+- apps/guru/components/profile-password-form.tsx
+- apps/orang-tua/app/api/profile/password/route.ts
+- apps/orang-tua/app/profil/page.tsx
+- apps/orang-tua/components/profile-password-form.tsx
+- apps/siswa/app/api/profile/password/route.ts
+- apps/siswa/app/profil/page.tsx
+- apps/siswa/components/profile-password-form.tsx
+- apps/super-admin/app/api/profile/password/route.ts
+- apps/super-admin/app/profil/page.tsx
+- apps/super-admin/components/profile-password-form.tsx
+
+File diganti:
+- apps/guru/app/globals.css
+- apps/guru/app/layout.tsx
+- apps/guru/components/app-shell.tsx
+- apps/guru/lib/nav.ts
+- apps/orang-tua/app/globals.css
+- apps/orang-tua/app/layout.tsx
+- apps/orang-tua/components/app-shell.tsx
+- apps/orang-tua/lib/nav.ts
+- apps/siswa/app/globals.css
+- apps/siswa/app/layout.tsx
+- apps/siswa/components/app-shell.tsx
+- apps/siswa/components/exam-mode.tsx
+- apps/siswa/lib/nav.ts
+- apps/super-admin/app/globals.css
+- apps/super-admin/app/layout.tsx
+- apps/super-admin/components/app-shell.tsx
+- apps/super-admin/lib/nav.ts
+- packages/core/src/auth.ts

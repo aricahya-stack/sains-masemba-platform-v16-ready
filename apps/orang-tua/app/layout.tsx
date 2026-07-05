@@ -5,7 +5,7 @@ import { AppShell } from '../components/app-shell';
 import { ToastProvider } from '../components/toast-provider';
 import { navItems } from '../lib/nav';
 import { appMeta } from '../lib/app';
-import { getCurrentUser, getGlobalBranding } from '@sh/core';
+import { getCurrentUser, getGlobalBranding, roleLabel } from '@sh/core';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -36,7 +36,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             loginHighlights={appMeta.loginHighlights}
             motto={branding.motto}
             navItems={navItems}
-            currentUser={currentUser ? { fullName: currentUser.fullName, email: currentUser.email, role: currentUser.role } : null}
+            currentUser={currentUser ? { fullName: currentUser.fullName, email: currentUser.email, role: roleLabel(currentUser.role) } : null}
             initialTheme={branding.theme}
             initialFont={branding.font}
           >
