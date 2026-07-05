@@ -1,0 +1,19 @@
+PATCH PEMBAHASAN TOPIK
+
+Isi patch:
+1. Menu Latihan di siswa dihapus dari navigasi dan diarahkan ke /pembahasan.
+2. Menu Pembahasan menampilkan kotak topik seperti menu Belajar.
+3. Kotak Pembahasan hanya muncul untuk topik yang sudah selesai dikerjakan di menu Belajar.
+4. Tombol Pembahasan di dalam topik Belajar dihapus.
+5. Tombol Tandai selesai dihapus. Topik otomatis selesai setelah semua latihan topik dijawab.
+6. Latihan topik mendukung pilihan ganda biasa, pilihan ganda kompleks, dan benar atau salah.
+7. Jika topik belum memiliki contoh pilihan ganda kompleks atau benar-salah, sistem menambahkan contoh soal TKA di tampilan siswa.
+
+Cara pakai:
+1. Extract ZIP ini.
+2. Copy folder apps ke root project.
+3. Replace file lama.
+4. Jalankan npm run build.
+5. Push ke GitHub agar Vercel deploy ulang.
+
+Patch ini tidak mengubah database. Tidak perlu db push hanya untuk patch ini.

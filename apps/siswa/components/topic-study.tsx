@@ -1,10 +1,16 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, RotateCcw, Search } from 'lucide-react';
+import { CheckCircle2, Search } from 'lucide-react';
 import { MathHtml } from './math-html';
-import { ExplanationTools } from './explanation-tools';
-import { useToast } from './toast-provider';
+import {
+  type AnswerValue,
+  isAnswered,
+  normalizeSelectedIds,
+  normalizeTrueFalseAnswers,
+  questionTypeLabel,
+  scoringModeLabel,
+} from '../lib/question-scoring';
 
 type MaterialPayload = {
   id: string;
@@ -19,6 +25,9 @@ type PracticeQuestion = {
   code: string;
   html: string;
   explanation: string;
+  questionType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
+  scoringMode: 'EXACT_MATCH' | 'PARTIAL_NO_PENALTY';
+  maxScore: number;
   options: { id: string; label: string; text: string; isCorrect: boolean }[];
 };
 
@@ -33,25 +42,33 @@ type TopicPayload = {
   questions: PracticeQuestion[];
 };
 
+const COMPLETED_KEY = 'sh_completed_topics';
+const ANSWERS_KEY = 'sh_topic_answers';
+
+function readJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) as T : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeJson(key: string, value: unknown) {
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {}
+}
+
 export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: TopicPayload[]; initialQuery?: string; selectedTopicId?: string }) {
-  const { notify } = useToast();
   const [query, setQuery] = useState(initialQuery || '');
   const [completed, setCompleted] = useState<Record<string, boolean>>({});
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
 
   useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem('sh_completed_topics');
-      if (raw) setCompleted(JSON.parse(raw));
-    } catch {}
+    setCompleted(readJson<Record<string, boolean>>(COMPLETED_KEY, {}));
+    setAnswers(readJson<Record<string, AnswerValue>>(ANSWERS_KEY, {}));
   }, []);
-
-  const saveCompleted = (topicId: string, value: boolean) => {
-    const next = { ...completed, [topicId]: value };
-    setCompleted(next);
-    try { window.localStorage.setItem('sh_completed_topics', JSON.stringify(next)); } catch {}
-  };
 
   const selectedTopic = useMemo(() => topics.find((topic) => topic.id === selectedTopicId) || null, [topics, selectedTopicId]);
   const filtered = useMemo(() => {
@@ -60,7 +77,56 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
     return topics.filter((topic) => `${topic.title} ${topic.description} ${topic.subject}`.toLowerCase().includes(normalized));
   }, [topics, query]);
 
+  const persistAnswer = (questionId: string, value: AnswerValue) => {
+    setAnswers((prev) => {
+      const next = { ...prev, [questionId]: value };
+      writeJson(ANSWERS_KEY, next);
+      return next;
+    });
+  };
+
+  const setSingleAnswer = (questionId: string, optionId: string) => {
+    persistAnswer(questionId, optionId);
+  };
+
+  const toggleMultipleAnswer = (questionId: string, optionId: string) => {
+    setAnswers((prev) => {
+      const selected = new Set(normalizeSelectedIds(prev[questionId]));
+      if (selected.has(optionId)) selected.delete(optionId);
+      else selected.add(optionId);
+      const next = { ...prev, [questionId]: Array.from(selected) };
+      writeJson(ANSWERS_KEY, next);
+      return next;
+    });
+  };
+
+  const setTrueFalseAnswer = (questionId: string, optionId: string, value: boolean) => {
+    setAnswers((prev) => {
+      const next = {
+        ...prev,
+        [questionId]: {
+          ...normalizeTrueFalseAnswers(prev[questionId]),
+          [optionId]: value,
+        },
+      };
+      writeJson(ANSWERS_KEY, next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (!selectedTopic || selectedTopic.questions.length === 0) return;
+    const finished = selectedTopic.questions.every((question) => isAnswered(question, answers[question.id]));
+    if (!finished || completed[selectedTopic.id]) return;
+    const next = { ...completed, [selectedTopic.id]: true };
+    setCompleted(next);
+    writeJson(COMPLETED_KEY, next);
+  }, [answers, completed, selectedTopic]);
+
   if (selectedTopic) {
+    const finishedQuestionCount = selectedTopic.questions.filter((question) => isAnswered(question, answers[question.id])).length;
+    const isTopicDone = Boolean(completed[selectedTopic.id]) || (selectedTopic.questions.length > 0 && finishedQuestionCount === selectedTopic.questions.length);
+
     return (
       <div className="stack">
         <div className="topic-detail-head card">
@@ -70,11 +136,8 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
             <p className="muted">{selectedTopic.description || 'Materi dan latihan pada topik ini siap dipelajari.'}</p>
           </div>
           <div className="inline-group">
-            {completed[selectedTopic.id] ? <span className="badge success"><CheckCircle2 size={15} /> Selesai</span> : <span className="badge">Belum selesai</span>}
-            <button className="button-secondary" type="button" onClick={() => saveCompleted(selectedTopic.id, !completed[selectedTopic.id])}>
-              {completed[selectedTopic.id] ? <RotateCcw size={15} /> : <CheckCircle2 size={15} />}
-              {completed[selectedTopic.id] ? 'Kerjakan lagi' : 'Tandai selesai'}
-            </button>
+            {isTopicDone ? <span className="badge success"><CheckCircle2 size={15} /> Selesai</span> : <span className="badge">Belum selesai</span>}
+            <span className="badge">{finishedQuestionCount}/{selectedTopic.questions.length} latihan terjawab</span>
             <Link className="button-secondary" href="/belajar">Kembali ke topik</Link>
           </div>
         </div>
@@ -105,56 +168,84 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
         <section className="card stack">
           <div>
             <div className="eyebrow">Latihan topik</div>
-            <strong>Kerjakan latihan, lalu buka pembahasan</strong>
-            <p className="muted">Pembahasan menandai jawaban benar/salah serta mendukung teks gerak dan suara bahasa Indonesia.</p>
+            <strong>Kerjakan latihan pada topik ini</strong>
+            <p className="muted">Topik otomatis bertanda selesai setelah semua latihan dijawab. Pembahasan dapat dibuka melalui menu Pembahasan.</p>
           </div>
           {selectedTopic.questions.length === 0 ? <div className="empty-state">Belum ada latihan pada topik ini.</div> : null}
           {selectedTopic.questions.map((question, index) => {
             const selected = answers[question.id];
-            const correct = question.options.find((option) => option.isCorrect);
-            const isCorrect = Boolean(selected && correct && selected === correct.id);
+            const answered = isAnswered(question, selected);
+            const selectedIds = new Set(normalizeSelectedIds(selected));
+            const trueFalseMap = normalizeTrueFalseAnswers(selected);
             return (
               <article className="practice-card" key={question.id}>
                 <div className="item-head">
                   <div>
                     <strong>{index + 1}. {question.code}</strong>
-                    <div className="muted">{selected ? (isCorrect ? 'Jawaban benar' : 'Jawaban belum tepat') : 'Pilih salah satu jawaban.'}</div>
+                    <div className="muted">{answered ? 'Jawaban tersimpan' : 'Belum dijawab'}</div>
+                    <div className="inline-group" style={{ marginTop: 8 }}>
+                      <span className="badge">{questionTypeLabel(question.questionType)}</span>
+                      <span className="badge">{scoringModeLabel(question.scoringMode)}</span>
+                    </div>
                   </div>
-                  <button
-                    className="button-secondary"
-                    type="button"
-                    onClick={() => {
-                      if (!selected) {
-                        notify('Pilih jawaban dulu', 'Pembahasan dibuka setelah siswa memilih jawaban.');
-                        return;
-                      }
-                      setRevealed((prev) => ({ ...prev, [question.id]: !prev[question.id] }));
-                    }}
-                  >
-                    {revealed[question.id] ? 'Tutup pembahasan' : 'Pembahasan'}
-                  </button>
+                  {answered ? <span className="badge success"><CheckCircle2 size={14} /> Terjawab</span> : <span className="badge">Belum terjawab</span>}
                 </div>
                 <MathHtml html={question.html} />
-                <div className="option-list">
-                  {question.options.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      className={`option-item option-button${selected === option.id ? ' selected' : ''}`}
-                      onClick={() => setAnswers((prev) => ({ ...prev, [question.id]: option.id }))}
-                    >
-                      <strong>{option.label}.</strong>
-                      <MathHtml html={option.text} />
-                    </button>
-                  ))}
-                </div>
-                {revealed[question.id] ? (
-                  <div className={`answer-status ${isCorrect ? 'is-correct' : 'is-wrong'}`}>
-                    <strong>{isCorrect ? 'Jawaban kamu benar.' : 'Jawaban kamu masih salah.'}</strong>
-                    <span> Kunci: {correct?.label || '-'}</span>
-                    <ExplanationTools html={question.explanation || '<p>Belum ada pembahasan.</p>'} />
+
+                {question.questionType === 'TRUE_FALSE' ? (
+                  <div className="tf-list">
+                    {question.options.map((option, optionIndex) => (
+                      <div className="tf-row" key={option.id}>
+                        <div className="tf-statement"><strong>{optionIndex + 1}.</strong> <MathHtml html={option.text} /></div>
+                        <div className="tf-actions">
+                          <button
+                            type="button"
+                            className={`button-secondary${trueFalseMap[option.id] === true ? ' active' : ''}`}
+                            onClick={() => setTrueFalseAnswer(question.id, option.id, true)}
+                          >
+                            Benar
+                          </button>
+                          <button
+                            type="button"
+                            className={`button-secondary${trueFalseMap[option.id] === false ? ' active' : ''}`}
+                            onClick={() => setTrueFalseAnswer(question.id, option.id, false)}
+                          >
+                            Salah
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ) : null}
+                ) : question.questionType === 'MULTIPLE_CHOICE' ? (
+                  <div className="stack">
+                    {question.options.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={`button-secondary${selectedIds.has(option.id) ? ' active' : ''}`}
+                        onClick={() => toggleMultipleAnswer(question.id, option.id)}
+                        style={{ justifyContent: 'flex-start', minHeight: 52 }}
+                      >
+                        <span className="checkbox-mark">{selectedIds.has(option.id) ? '☑' : '☐'}</span>
+                        <strong style={{ marginRight: 8 }}>{option.label}.</strong> <MathHtml html={option.text} />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="stack">
+                    {question.options.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className={`button-secondary${selectedIds.has(option.id) ? ' active' : ''}`}
+                        onClick={() => setSingleAnswer(question.id, option.id)}
+                        style={{ justifyContent: 'flex-start', minHeight: 52 }}
+                      >
+                        <strong style={{ marginRight: 8 }}>{option.label}.</strong> <MathHtml html={option.text} />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </article>
             );
           })}
