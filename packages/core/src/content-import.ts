@@ -1,0 +1,509 @@
+import bcrypt from 'bcryptjs';
+import {
+  prisma,
+  PublishStatus,
+  QuestionType,
+  ScoringMode,
+  TryoutStatus,
+  UserRole,
+} from '@sh/db';
+import { slugify, splitLines, toDateOrNull, toFloat, toInt } from './utils';
+
+export type ImportKind = 'MATERIAL' | 'BLUEPRINT' | 'QUESTION' | 'TRYOUT' | 'USER' | 'PARENT_LINK';
+export type ImportRow = Record<string, unknown>;
+
+export type ImportActor = {
+  id: string;
+  role: UserRole;
+};
+
+export type ImportResult = {
+  kind: ImportKind;
+  processedRows: number;
+  created: number;
+  updated: number;
+  linked: number;
+  warnings: string[];
+  details: Record<string, number>;
+};
+
+const publishStatuses = new Set(Object.values(PublishStatus));
+const questionTypes = new Set(Object.values(QuestionType));
+const scoringModes = new Set(Object.values(ScoringMode));
+const tryoutStatuses = new Set(Object.values(TryoutStatus));
+const userRoles = new Set(Object.values(UserRole));
+
+function text(value: unknown) {
+  return String(value ?? '').trim();
+}
+
+function stripHtml(value: unknown) {
+  return text(value)
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizePublishStatus(value: unknown): PublishStatus {
+  const normalized = text(value).toUpperCase() as PublishStatus;
+  return publishStatuses.has(normalized) ? normalized : PublishStatus.DRAFT;
+}
+
+function normalizeQuestionType(value: unknown): QuestionType {
+  const normalized = text(value).toUpperCase() as QuestionType;
+  return questionTypes.has(normalized) ? normalized : QuestionType.SINGLE_CHOICE;
+}
+
+function normalizeScoringMode(value: unknown): ScoringMode {
+  const normalized = text(value).toUpperCase() as ScoringMode;
+  return scoringModes.has(normalized) ? normalized : ScoringMode.EXACT_MATCH;
+}
+
+function normalizeTryoutStatus(value: unknown): TryoutStatus {
+  const normalized = text(value).toUpperCase() as TryoutStatus;
+  return tryoutStatuses.has(normalized) ? normalized : TryoutStatus.DRAFT;
+}
+
+function splitTokens(value: unknown) {
+  return text(value)
+    .replace(/\r?\n/g, ',')
+    .split(/[,;|/]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function trueFalseTokenToBoolean(value: string | undefined) {
+  const token = text(value).toLowerCase();
+  if (['b', 'benar', 'true', 't', '1', 'ya', 'y'].includes(token)) return true;
+  if (['s', 'salah', 'false', 'f', '0', 'tidak', 'n'].includes(token)) return false;
+  return null;
+}
+
+function parseBoolean(value: unknown, fallback = true) {
+  const token = text(value).toLowerCase();
+  if (!token) return fallback;
+  if (['true', '1', 'ya', 'y', 'aktif', 'active'].includes(token)) return true;
+  if (['false', '0', 'tidak', 'n', 'nonaktif', 'inactive'].includes(token)) return false;
+  return fallback;
+}
+
+function questionOptionData(row: ImportRow, questionType: QuestionType) {
+  const labels = ['A', 'B', 'C', 'D', 'E'];
+  const options = labels
+    .map((label) => ({
+      label,
+      optionText: text(row[`opsi_${label.toLowerCase()}`]),
+    }))
+    .filter((item) => item.optionText);
+
+  if (options.length < 2) throw new Error('Minimal dua opsi/pernyataan harus tersedia.');
+
+  const keyTokens = splitTokens(row.kunci_jawaban).map((token) => token.toUpperCase());
+  const available = new Set(options.map((item) => item.label));
+
+  if (questionType === QuestionType.TRUE_FALSE) {
+    if (keyTokens.length !== options.length) {
+      throw new Error(`Kunci benar-salah harus berjumlah ${options.length} sesuai jumlah pernyataan.`);
+    }
+    return options.map((option, index) => {
+      const parsed = trueFalseTokenToBoolean(keyTokens[index]);
+      if (parsed === null) throw new Error(`Kunci benar-salah ke-${index + 1} harus B atau S.`);
+      return { ...option, isCorrect: parsed };
+    });
+  }
+
+  if (questionType === QuestionType.SINGLE_CHOICE) {
+    if (keyTokens.length !== 1 || !available.has(keyTokens[0])) {
+      throw new Error('Pilihan ganda biasa harus memiliki tepat satu kunci yang cocok dengan opsi tersedia.');
+    }
+    return options.map((option) => ({ ...option, isCorrect: option.label === keyTokens[0] }));
+  }
+
+  if (!keyTokens.length || keyTokens.some((token) => !available.has(token))) {
+    throw new Error('Kunci pilihan ganda kompleks harus cocok dengan opsi tersedia, contoh A,C,D.');
+  }
+  const correct = new Set(keyTokens);
+  return options.map((option) => ({ ...option, isCorrect: correct.has(option.label) }));
+}
+
+async function importMaterials(rows: ImportRow[], actor: ImportActor): Promise<ImportResult> {
+  const groups = new Map<string, { first: ImportRow; rows: ImportRow[] }>();
+  for (const row of rows) {
+    const topicTitle = text(row.topicTitle);
+    const materialTitle = text(row.materialTitle);
+    if (!topicTitle || !materialTitle) throw new Error('Setiap baris materi wajib memiliki topicTitle dan materialTitle.');
+    const topicSlug = text(row.topicSlug) || slugify(topicTitle);
+    const key = `${topicSlug}::${materialTitle.toLowerCase()}`;
+    const group = groups.get(key) || { first: row, rows: [] };
+    group.rows.push(row);
+    groups.set(key, group);
+  }
+
+  const result: ImportResult = {
+    kind: 'MATERIAL',
+    processedRows: rows.length,
+    created: 0,
+    updated: 0,
+    linked: 0,
+    warnings: [],
+    details: { topicsCreated: 0, topicsUpdated: 0, materialsCreated: 0, materialsUpdated: 0, sections: 0, objectives: 0 },
+  };
+
+  await prisma.$transaction(async (tx) => {
+    for (const { first, rows: groupRows } of groups.values()) {
+      const topicTitle = text(first.topicTitle);
+      const topicSlug = text(first.topicSlug) || slugify(topicTitle);
+      const existingTopic = await tx.topic.findUnique({ where: { slug: topicSlug } });
+      const topic = existingTopic
+        ? await tx.topic.update({
+            where: { id: existingTopic.id },
+            data: {
+              title: topicTitle,
+              subject: text(first.subject) || 'IPA SMP',
+              description: text(first.topicDescription) || null,
+              orderNo: toInt(first.topicOrder, existingTopic.orderNo),
+            },
+          })
+        : await tx.topic.create({
+            data: {
+              title: topicTitle,
+              slug: topicSlug,
+              subject: text(first.subject) || 'IPA SMP',
+              description: text(first.topicDescription) || null,
+              orderNo: toInt(first.topicOrder, 0),
+            },
+          });
+
+      if (existingTopic) result.details.topicsUpdated += 1;
+      else result.details.topicsCreated += 1;
+
+      const materialTitle = text(first.materialTitle);
+      const existingMaterial = await tx.material.findFirst({
+        where: actor.role === UserRole.SUPER_ADMIN
+          ? { topicId: topic.id, title: materialTitle }
+          : { topicId: topic.id, title: materialTitle, authorId: actor.id },
+      });
+
+      const materialData = {
+        topicId: topic.id,
+        title: materialTitle,
+        level: text(first.materialLevel) || null,
+        status: normalizePublishStatus(first.materialStatus),
+        summaryHtml: text(first.summaryHtml) || null,
+        summaryText: stripHtml(first.summaryHtml) || null,
+      };
+
+      const material = existingMaterial
+        ? await tx.material.update({ where: { id: existingMaterial.id }, data: materialData })
+        : await tx.material.create({ data: { ...materialData, authorId: actor.id } });
+
+      if (existingMaterial) {
+        result.updated += 1;
+        result.details.materialsUpdated += 1;
+        await tx.learningObjective.deleteMany({ where: { materialId: material.id } });
+        await tx.materialSection.deleteMany({ where: { materialId: material.id } });
+      } else {
+        result.created += 1;
+        result.details.materialsCreated += 1;
+      }
+
+      const objectives = splitLines(first.objectivesText);
+      if (objectives.length) {
+        await tx.learningObjective.createMany({
+          data: objectives.map((objective, index) => ({ materialId: material.id, orderNo: index + 1, objective })),
+        });
+      }
+      result.details.objectives += objectives.length;
+
+      const sections = groupRows
+        .map((row, index) => ({
+          orderNo: Math.max(1, toInt(row.sectionOrder, index + 1)),
+          title: text(row.sectionTitle) || `Bagian ${index + 1}`,
+          contentHtml: text(row.sectionHtml) || null,
+          contentText: stripHtml(row.sectionHtml) || null,
+        }))
+        .filter((section) => section.title || section.contentHtml)
+        .sort((a, b) => a.orderNo - b.orderNo);
+
+      if (sections.length) {
+        await tx.materialSection.createMany({
+          data: sections.map((section) => ({ materialId: material.id, ...section })),
+        });
+      }
+      result.details.sections += sections.length;
+    }
+  }, { timeout: 60000 });
+
+  return result;
+}
+
+async function importBlueprints(rows: ImportRow[]): Promise<ImportResult> {
+  const result: ImportResult = {
+    kind: 'BLUEPRINT', processedRows: rows.length, created: 0, updated: 0, linked: 0, warnings: [],
+    details: { blueprintsCreated: 0, blueprintsUpdated: 0, missingTopics: 0 },
+  };
+
+  await prisma.$transaction(async (tx) => {
+    for (const row of rows) {
+      const code = text(row.code);
+      if (!code || !text(row.competency) || !text(row.indicator)) {
+        throw new Error('Setiap kisi-kisi wajib memiliki code, competency, dan indicator.');
+      }
+      const topicSlug = text(row.topicSlug);
+      const topic = topicSlug ? await tx.topic.findUnique({ where: { slug: topicSlug } }) : null;
+      if (topicSlug && !topic) {
+        result.details.missingTopics += 1;
+        result.warnings.push(`Topik ${topicSlug} belum ditemukan untuk kisi-kisi ${code}; relasi topik dikosongkan.`);
+      }
+      const existing = await tx.blueprint.findUnique({ where: { code } });
+      const data = {
+        testGroup: text(row.testGroup) || null,
+        topicId: topic?.id || null,
+        competency: text(row.competency),
+        indicator: text(row.indicator),
+        materialName: text(row.materialName) || null,
+        cognitiveLevel: text(row.cognitiveLevel) || null,
+        targetDifficulty: text(row.targetDifficulty) || null,
+        targetQuestionCount: toInt(row.targetQuestionCount, 0),
+        blueprintText: text(row.blueprintText) || null,
+      };
+      if (existing) {
+        await tx.blueprint.update({ where: { id: existing.id }, data });
+        result.updated += 1;
+        result.details.blueprintsUpdated += 1;
+      } else {
+        await tx.blueprint.create({ data: { code, ...data } });
+        result.created += 1;
+        result.details.blueprintsCreated += 1;
+      }
+    }
+  }, { timeout: 60000 });
+  result.warnings = result.warnings.slice(0, 20);
+  return result;
+}
+
+async function importQuestions(rows: ImportRow[], actor: ImportActor): Promise<ImportResult> {
+  const result: ImportResult = {
+    kind: 'QUESTION', processedRows: rows.length, created: 0, updated: 0, linked: 0, warnings: [],
+    details: { questionsCreated: 0, questionsUpdated: 0, options: 0, topicsCreated: 0, missingBlueprints: 0 },
+  };
+
+  await prisma.$transaction(async (tx) => {
+    const topicCache = new Map<string, string>();
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const code = text(row.kode_soal);
+      const topicTitle = text(row.topik);
+      const promptHtml = text(row.pertanyaan_html);
+      if (!code || !topicTitle || !promptHtml) {
+        throw new Error(`Baris ${index + 1}: kode_soal, topik, dan pertanyaan_html wajib diisi.`);
+      }
+
+      const topicSlug = slugify(topicTitle);
+      let topicId = topicCache.get(topicSlug);
+      if (!topicId) {
+        let topic = await tx.topic.findUnique({ where: { slug: topicSlug } });
+        if (!topic) {
+          topic = await tx.topic.create({ data: { title: topicTitle, slug: topicSlug, subject: 'IPA SMP' } });
+          result.details.topicsCreated += 1;
+        }
+        topicId = topic.id;
+        topicCache.set(topicSlug, topic.id);
+      }
+
+      const blueprintCode = text(row.kode_kisi_kisi);
+      const blueprint = blueprintCode ? await tx.blueprint.findUnique({ where: { code: blueprintCode } }) : null;
+      if (blueprintCode && !blueprint) {
+        result.details.missingBlueprints += 1;
+        if (result.warnings.length < 20) result.warnings.push(`Kisi-kisi ${blueprintCode} untuk soal ${code} belum ditemukan; soal tetap diimpor tanpa relasi kisi-kisi.`);
+      }
+
+      const questionType = normalizeQuestionType(row.jenis_soal);
+      const options = questionOptionData(row, questionType);
+      const stimulusHtml = text(row.stimulus_html);
+      const questionHtml = [stimulusHtml, promptHtml].filter(Boolean).join('\n');
+      const existing = await tx.question.findUnique({ where: { code } });
+      if (existing && actor.role !== UserRole.SUPER_ADMIN && existing.authorId !== actor.id) {
+        throw new Error(`Kode soal ${code} sudah dimiliki guru lain dan tidak dapat ditimpa.`);
+      }
+
+      const data = {
+        topicId,
+        blueprintId: blueprint?.id || null,
+        stimulusOrder: Math.max(1, toInt(row.urutan_stimulus, index + 1)),
+        questionType,
+        scoringMode: normalizeScoringMode(row.sistem_penilaian),
+        maxScore: Math.max(0.1, toFloat(row.bobot, 1)),
+        questionText: stripHtml(questionHtml),
+        questionHtml,
+        explanation: text(row.pembahasan_html) || null,
+        difficulty: text(row.tingkat_kesulitan) || null,
+        status: normalizePublishStatus(row.status),
+      };
+
+      const question = existing
+        ? await tx.question.update({ where: { id: existing.id }, data })
+        : await tx.question.create({ data: { code, authorId: actor.id, ...data } });
+
+      if (existing) {
+        result.updated += 1;
+        result.details.questionsUpdated += 1;
+        await tx.questionOption.deleteMany({ where: { questionId: question.id } });
+      } else {
+        result.created += 1;
+        result.details.questionsCreated += 1;
+      }
+
+      await tx.questionOption.createMany({ data: options.map((option) => ({ questionId: question.id, ...option })) });
+      result.details.options += options.length;
+
+    }
+  }, { timeout: 60000 });
+
+  return result;
+}
+
+async function importTryouts(rows: ImportRow[], actor: ImportActor): Promise<ImportResult> {
+  const result: ImportResult = {
+    kind: 'TRYOUT', processedRows: rows.length, created: 0, updated: 0, linked: 0, warnings: [],
+    details: { tryoutsCreated: 0, tryoutsUpdated: 0, questionLinks: 0, missingQuestions: 0 },
+  };
+
+  await prisma.$transaction(async (tx) => {
+    for (const row of rows) {
+      const title = text(row.tryoutTitle);
+      if (!title) throw new Error('Setiap baris mapping tryout wajib memiliki tryoutTitle.');
+      const existing = await tx.tryout.findFirst({ where: { title, authorId: actor.id } });
+      const data = {
+        description: text(row.description) || null,
+        durationMinutes: Math.max(1, toInt(row.durationMinutes, 60)),
+        status: normalizeTryoutStatus(row.status),
+        startAt: toDateOrNull(row.startAt),
+        endAt: toDateOrNull(row.endAt),
+        rulesHtml: text(row.rulesHtml) || null,
+      };
+      const tryout = existing
+        ? await tx.tryout.update({ where: { id: existing.id }, data })
+        : await tx.tryout.create({ data: { title, authorId: actor.id, ...data } });
+      if (existing) {
+        result.updated += 1;
+        result.details.tryoutsUpdated += 1;
+      } else {
+        result.created += 1;
+        result.details.tryoutsCreated += 1;
+      }
+
+      const codes = splitTokens(row.questionCodes);
+      await tx.tryoutQuestion.deleteMany({ where: { tryoutId: tryout.id } });
+      for (let index = 0; index < codes.length; index += 1) {
+        const question = await tx.question.findUnique({ where: { code: codes[index] } });
+        if (!question) {
+          result.details.missingQuestions += 1;
+          if (result.warnings.length < 20) result.warnings.push(`Soal ${codes[index]} tidak ditemukan untuk ${title}.`);
+          continue;
+        }
+        await tx.tryoutQuestion.create({ data: { tryoutId: tryout.id, questionId: question.id, orderNo: index + 1 } });
+        result.linked += 1;
+        result.details.questionLinks += 1;
+      }
+    }
+  }, { timeout: 60000 });
+  return result;
+}
+
+async function importUsers(rows: ImportRow[]): Promise<ImportResult> {
+  const result: ImportResult = {
+    kind: 'USER', processedRows: rows.length, created: 0, updated: 0, linked: 0, warnings: [],
+    details: { usersCreated: 0, usersUpdated: 0, withoutPassword: 0 },
+  };
+
+  for (const row of rows) {
+    const fullName = text(row.full_name);
+    const email = text(row.email).toLowerCase();
+    const role = text(row.role).toUpperCase() as UserRole;
+    if (!fullName || !email || !userRoles.has(role)) throw new Error(`Data user tidak valid: ${email || '(email kosong)'}.`);
+    const existing = await prisma.user.findUnique({ where: { email } });
+    const password = text(row.password);
+    const passwordHash = password ? await bcrypt.hash(password, 10) : undefined;
+    const data = {
+      fullName,
+      role,
+      phone: text(row.phone) || null,
+      className: role === UserRole.SISWA ? (text(row.class_name) || null) : null,
+      status: text(row.status) || 'ACTIVE',
+      ...(passwordHash ? { passwordHash } : {}),
+    };
+    if (existing) {
+      await prisma.user.update({ where: { id: existing.id }, data });
+      result.updated += 1;
+      result.details.usersUpdated += 1;
+    } else {
+      await prisma.user.create({ data: { email, ...data, passwordHash: passwordHash || null } });
+      result.created += 1;
+      result.details.usersCreated += 1;
+      if (!passwordHash) result.details.withoutPassword += 1;
+    }
+  }
+  if (result.details.withoutPassword) result.warnings.push(`${result.details.withoutPassword} akun baru dibuat tanpa password dan belum dapat login sampai password ditetapkan.`);
+  return result;
+}
+
+async function importParentLinks(rows: ImportRow[]): Promise<ImportResult> {
+  const result: ImportResult = {
+    kind: 'PARENT_LINK', processedRows: rows.length, created: 0, updated: 0, linked: 0, warnings: [],
+    details: { linksCreated: 0, linksUpdated: 0 },
+  };
+  await prisma.$transaction(async (tx) => {
+    for (const row of rows) {
+      const parentEmail = text(row.parent_email).toLowerCase();
+      const studentEmail = text(row.student_email).toLowerCase();
+      if (!parentEmail || !studentEmail) throw new Error('parent_email dan student_email wajib diisi.');
+      const [parent, student] = await Promise.all([
+        tx.user.findUnique({ where: { email: parentEmail } }),
+        tx.user.findUnique({ where: { email: studentEmail } }),
+      ]);
+      if (!parent || !student) throw new Error(`User relasi tidak ditemukan: ${parentEmail} / ${studentEmail}.`);
+      const existing = await tx.parentStudentLink.findUnique({ where: { parentId_studentId: { parentId: parent.id, studentId: student.id } } });
+      const data = { relationType: text(row.relation_type) || 'Wali', isActive: parseBoolean(row.is_active, true) };
+      if (existing) {
+        await tx.parentStudentLink.update({ where: { id: existing.id }, data });
+        result.updated += 1;
+        result.details.linksUpdated += 1;
+      } else {
+        await tx.parentStudentLink.create({ data: { parentId: parent.id, studentId: student.id, ...data } });
+        result.created += 1;
+        result.details.linksCreated += 1;
+      }
+    }
+  }, { timeout: 60000 });
+  return result;
+}
+
+export async function importRowsToDatabase(args: {
+  kind: ImportKind;
+  rows: ImportRow[];
+  actor: ImportActor;
+  allowAdminImports?: boolean;
+}): Promise<ImportResult> {
+  const { kind, rows, actor, allowAdminImports = false } = args;
+  if (!Array.isArray(rows) || rows.length === 0) throw new Error('Tidak ada baris data untuk diimpor.');
+  if (rows.length > 1000) throw new Error('Maksimal 1000 baris per permintaan import.');
+
+  switch (kind) {
+    case 'MATERIAL': return importMaterials(rows, actor);
+    case 'BLUEPRINT': return importBlueprints(rows);
+    case 'QUESTION': return importQuestions(rows, actor);
+    case 'TRYOUT': return importTryouts(rows, actor);
+    case 'USER':
+      if (!allowAdminImports) throw new Error('Import user hanya tersedia untuk Super Admin.');
+      return importUsers(rows);
+    case 'PARENT_LINK':
+      if (!allowAdminImports) throw new Error('Import relasi orang tua-siswa hanya tersedia untuk Super Admin.');
+      return importParentLinks(rows);
+    default:
+      throw new Error('Jenis import tidak dikenali.');
+  }
+}

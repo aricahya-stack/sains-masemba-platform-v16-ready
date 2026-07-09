@@ -1,0 +1,55 @@
+PATCH V17 — IMPORT EXCEL KE DATABASE
+Repository target: sains-masemba-platform-v16-ready-main
+
+FITUR BARU
+1. Tombol "Validasi File".
+2. Tombol "Import N Data ke Database".
+3. Status jumlah data valid, error, dan peringatan.
+4. Preview 5 baris pertama.
+5. Progress import dan ringkasan hasil database.
+6. Respons API aman jika server mengembalikan error.
+7. Import bank soal besar diproses per 40 baris untuk mengurangi risiko timeout/payload besar.
+
+JENIS TEMPLATE YANG DIDUKUNG
+- MATERIAL: topik, materi, tujuan pembelajaran, dan bagian materi.
+- BLUEPRINT: kisi-kisi.
+- QUESTION: bank soal PG biasa, PG kompleks, dan benar-salah.
+- TRYOUT: mapping paket tryout dan kode soal.
+- USER: khusus Super Admin.
+- PARENT_LINK: khusus Super Admin.
+
+URUTAN YANG DIREKOMENDASIKAN UNTUK FILE 30 TOPIK + 300 SOAL
+1. Import material-import-30-topik-ipa-fase-d.xlsx.
+2. Setelah berhasil, import question-import-300-soal-ipa-fase-d-tkad.xlsx.
+
+CATATAN PENTING
+- Memilih file TIDAK langsung menyimpan data.
+- Tombol Import aktif setelah Validasi File selesai tanpa error.
+- Import materi membuat/memperbarui Topik berdasarkan slug.
+- Re-import materi memperbarui materi yang cocok dan mengganti ulang tujuan/bagian materinya.
+- Import soal memakai kode_soal sebagai kunci unik; re-import memperbarui soal yang sama.
+- Soal otomatis terhubung ke topik, sehingga tampil sebagai latihan topikal pada menu Belajar siswa.
+- Jika kode_kisi_kisi belum ada, soal tetap diimpor tanpa relasi kisi-kisi dan sistem memberi peringatan.
+- Import QUESTION tidak otomatis membuat paket tryout. Gunakan template Mapping Tryout bila ingin membentuk paket ujian.
+- Tidak ada perubahan schema Prisma dan tidak diperlukan migration baru.
+
+CARA PASANG
+1. Ekstrak isi ZIP ini di root repository.
+2. Izinkan replace/overwrite file yang sudah ada.
+3. Commit dan push ke branch production GitHub yang terhubung ke Vercel.
+4. Setelah deploy, buka menu Import Excel.
+5. Pilih file -> klik Validasi File -> klik Import ke Database.
+
+FILE PATCH
+- apps/guru/components/import-center.tsx
+- apps/guru/app/api/imports/route.ts
+- apps/super-admin/components/import-center.tsx
+- apps/super-admin/app/api/imports/route.ts
+- packages/core/src/content-import.ts
+- packages/core/src/index.ts
+
+PENGUJIAN
+- Parser Excel diuji terhadap file 30 topik: terdeteksi MATERIAL, 180 baris, 0 error validasi.
+- Parser Excel diuji terhadap file 300 soal: terdeteksi QUESTION, 300 baris, 0 error validasi.
+- Pemeriksaan sintaks TypeScript tidak menemukan syntax error pada file patch.
+- Full typecheck/build tidak dapat diselesaikan di lingkungan pengujian karena prisma generate membutuhkan akses ke binaries.prisma.sh dan host tersebut gagal di-resolve (EAI_AGAIN). Ini bukan error dari source patch.
