@@ -104,10 +104,24 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   const user = await ensureTeacher();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const body = await request.json();
-  const owned = await prisma.material.findUnique({ where: { id: String(body.id) } });
-  if (!owned || owned.authorId !== user.id) return NextResponse.json({ error: 'Materi tidak ditemukan.' }, { status: 404 });
 
-  await prisma.material.delete({ where: { id: String(body.id) } });
-  return NextResponse.json({ ok: true });
+  try {
+    const body = await request.json();
+    const id = String(body.id || '');
+    if (!id) return NextResponse.json({ error: 'ID materi wajib ada.' }, { status: 400 });
+
+    const owned = await prisma.material.findUnique({ where: { id } });
+    if (!owned || owned.authorId !== user.id) {
+      return NextResponse.json({ error: 'Materi tidak ditemukan atau bukan milik akun ini.' }, { status: 404 });
+    }
+
+    await prisma.material.delete({ where: { id } });
+    return NextResponse.json({ ok: true, message: 'Materi berhasil dihapus.' });
+  } catch (error) {
+    console.error('DELETE /api/materials failed:', error);
+    return NextResponse.json(
+      { error: 'Gagal menghapus materi. Silakan muat ulang halaman dan coba lagi.' },
+      { status: 500 },
+    );
+  }
 }

@@ -55,9 +55,61 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   if (!(await ensureAdmin())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const body = await request.json();
-  if (!body.id) return NextResponse.json({ error: 'ID topik wajib ada.' }, { status: 400 });
 
-  await prisma.topic.delete({ where: { id: String(body.id) } });
-  return NextResponse.json({ ok: true });
+  try {
+    const body = await request.json();
+    const id = String(body.id || '');
+    if (!id) return NextResponse.json({ error: 'ID topik wajib ada.' }, { status: 400 });
+
+    const existing = await prisma.topic.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        title: true,
+        _count: { select: { materials: true, questions: true, blueprints: true } },
+      },
+    });
+
+    if (!existing) return NextResponse.json({ error: 'Topik tidak ditemukan.' }, { status: 404 });
+
+    const deleted = await prisma.$transaction(async (tx) => {
+      const blueprintIds = (
+        await tx.blueprint.findMany({ where: { topicId: id }, select: { id: true } })
+      ).map((item) => item.id);
+
+      // Blueprint milik topik dapat direferensikan soal. Lepaskan referensinya dulu agar penghapusan bersih.
+      if (blueprintIds.length) {
+        await tx.question.updateMany({
+          where: { blueprintId: { in: blueprintIds } },
+          data: { blueprintId: null },
+        });
+      }
+
+      // Child records QuestionOption, TryoutQuestion, AttemptAnswer,
+      // MaterialSection, dan LearningObjective terhapus melalui onDelete: Cascade.
+      const questions = await tx.question.deleteMany({ where: { topicId: id } });
+      const materials = await tx.material.deleteMany({ where: { topicId: id } });
+      const blueprints = await tx.blueprint.deleteMany({ where: { topicId: id } });
+      await tx.topic.delete({ where: { id } });
+
+      return {
+        topic: 1,
+        materials: materials.count,
+        questions: questions.count,
+        blueprints: blueprints.count,
+      };
+    });
+
+    return NextResponse.json({
+      ok: true,
+      message: `Topik "${existing.title}" beserta konten terkait berhasil dihapus.`,
+      deleted,
+    });
+  } catch (error) {
+    console.error('DELETE /api/topics failed:', error);
+    return NextResponse.json(
+      { error: 'Gagal menghapus topik. Server telah mengembalikan respons JSON yang aman. Periksa log server untuk detail teknis.' },
+      { status: 500 },
+    );
+  }
 }

@@ -30,6 +30,16 @@ function stripHtml(value: string) {
   return String(value || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+async function readJsonResponse(response: Response): Promise<Record<string, any>> {
+  const text = await response.text();
+  if (!text.trim()) return {};
+  try {
+    return JSON.parse(text) as Record<string, any>;
+  } catch {
+    return { error: `Respons server tidak valid (${response.status}). Silakan muat ulang halaman dan coba lagi.` };
+  }
+}
+
 export function EditableManager({
   eyebrow,
   title,
@@ -87,7 +97,7 @@ export function EditableManager({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse(response);
       if (!response.ok) {
         notify('Gagal menyimpan', payload.error || 'Terjadi kesalahan pada server.');
         return;
@@ -115,7 +125,7 @@ export function EditableManager({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse(response);
       if (!response.ok) {
         notify('Gagal menghapus', payload.error || 'Terjadi kesalahan pada server.');
         return;

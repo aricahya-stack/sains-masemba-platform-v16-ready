@@ -8,6 +8,7 @@ export const navItems: NavItem[] = [
   { label: 'Siswa', href: '/siswa', section: 'Manajemen', icon: 'BookUser' },
   { label: 'Orang Tua', href: '/orang-tua', section: 'Manajemen', icon: 'HeartHandshake' },
   { label: 'Topik', href: '/topik', section: 'Akademik', icon: 'BookOpen' },
+  { label: 'Materi', href: '/materi', section: 'Akademik', icon: 'Library' },
   { label: 'Approval', href: '/approval', section: 'Akademik', icon: 'BadgeCheck' },
   { label: 'Import Excel', href: '/imports', section: 'Operasional', icon: 'FileSpreadsheet' },
   { label: 'Monitoring', href: '/monitoring', section: 'Operasional', icon: 'Radar' },
