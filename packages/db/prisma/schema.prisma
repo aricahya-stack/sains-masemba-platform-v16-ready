@@ -54,6 +54,7 @@ model User {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
   materials      Material[]          @relation("MaterialAuthor")
+  tkadTips       TkadTip[]           @relation("TkadTipAuthor")
   questions      Question[]          @relation("QuestionAuthor")
   tryouts        Tryout[]            @relation("TryoutAuthor")
   attempts       Attempt[]
@@ -128,6 +129,19 @@ model LearningObjective {
   orderNo    Int
   objective  String
   material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+}
+
+model TkadTip {
+  id          String        @id @default(cuid())
+  authorId    String
+  category    String
+  title       String
+  contentHtml String
+  orderNo     Int           @default(0)
+  status      PublishStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  author      User          @relation("TkadTipAuthor", fields: [authorId], references: [id])
 }
 
 model Blueprint {

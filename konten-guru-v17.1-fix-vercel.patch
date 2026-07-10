@@ -1,0 +1,1385 @@
+diff --git a/apps/guru/app/api/materials/route.ts b/apps/guru/app/api/materials/route.ts
+index e1bf80b..989be0c 100644
+--- a/apps/guru/app/api/materials/route.ts
++++ b/apps/guru/app/api/materials/route.ts
+@@ -10,12 +10,17 @@ async function ensureTeacher() {
+ async function serialize(materialId: string) {
+   const material = await prisma.material.findUniqueOrThrow({
+     where: { id: materialId },
+-    include: { objectives: { orderBy: { orderNo: 'asc' } }, sections: { orderBy: { orderNo: 'asc' } } },
++    include: {
++      topic: true,
++      objectives: { orderBy: { orderNo: 'asc' } },
++      sections: { orderBy: { orderNo: 'asc' } },
++    },
+   });
+   return {
+     id: material.id,
+     title: material.title,
+     topicId: material.topicId,
++    topicLabel: material.topic.title,
+     level: material.level || '',
+     status: material.status,
+     summaryHtml: material.summaryHtml || material.summaryText || '',
+diff --git a/apps/guru/app/api/questions/route.ts b/apps/guru/app/api/questions/route.ts
+index c60fe1f..d47a9d1 100644
+--- a/apps/guru/app/api/questions/route.ts
++++ b/apps/guru/app/api/questions/route.ts
+@@ -1,5 +1,5 @@
+ import { NextResponse } from 'next/server';
+-import { prisma, QuestionType, ScoringMode, UserRole } from '@sh/db';
++import { prisma, PublishStatus, QuestionType, ScoringMode, UserRole } from '@sh/db';
+ import { getCurrentUser, toFloat, toInt } from '@sh/core';
+ 
+ async function ensureTeacher() {
+@@ -19,6 +19,14 @@ function normalizeScoringMode(value: unknown): ScoringMode {
+   return value === ScoringMode.PARTIAL_NO_PENALTY ? value : ScoringMode.EXACT_MATCH;
+ }
+ 
++function normalizePublishStatus(value: unknown): PublishStatus {
++  return value === PublishStatus.REVIEW ||
++    value === PublishStatus.PUBLISHED ||
++    value === PublishStatus.ARCHIVED
++    ? value
++    : PublishStatus.DRAFT;
++}
++
+ function splitKey(value: unknown) {
+   return String(value || '')
+     .replace(/\s+/g, '')
+@@ -68,14 +76,20 @@ function getCorrectAnswers(questionType: QuestionType, options: Array<{ label: s
+ async function serialize(questionId: string) {
+   const question = await prisma.question.findUniqueOrThrow({
+     where: { id: questionId },
+-    include: { options: { orderBy: { label: 'asc' } } },
++    include: {
++      topic: true,
++      blueprint: true,
++      options: { orderBy: { label: 'asc' } },
++    },
+   });
+   const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
+   return {
+     id: question.id,
+     code: question.code,
+     topicId: question.topicId,
++    topicLabel: question.topic.title,
+     blueprintId: question.blueprintId || '',
++    blueprintLabel: question.blueprint?.code || 'Tanpa kisi-kisi',
+     difficulty: question.difficulty || '',
+     status: question.status,
+     stimulusOrder: String(question.stimulusOrder),
+@@ -147,7 +161,7 @@ function buildQuestionData(body: Record<string, unknown>) {
+     questionHtml: String(body.questionHtml),
+     explanation: body.explanation ? String(body.explanation) : null,
+     difficulty: body.difficulty ? String(body.difficulty) : null,
+-    status: body.status || 'DRAFT',
++    status: normalizePublishStatus(body.status),
+   };
+ }
+ 
+diff --git a/apps/guru/app/api/tkad-tips/route.ts b/apps/guru/app/api/tkad-tips/route.ts
+new file mode 100644
+index 0000000..26b613a
+--- /dev/null
++++ b/apps/guru/app/api/tkad-tips/route.ts
+@@ -0,0 +1,85 @@
++import { NextResponse } from 'next/server';
++import { prisma, PublishStatus, UserRole } from '@sh/db';
++import { getCurrentUser, toInt } from '@sh/core';
++
++async function ensureTeacher() {
++  const user = await getCurrentUser();
++  return user && user.role === UserRole.GURU ? user : null;
++}
++
++function serialize(item: {
++  id: string;
++  category: string;
++  title: string;
++  contentHtml: string;
++  orderNo: number;
++  status: string;
++}) {
++  return {
++    id: item.id,
++    category: item.category,
++    title: item.title,
++    contentHtml: item.contentHtml,
++    orderNo: String(item.orderNo),
++    status: item.status,
++  };
++}
++
++function normalizeStatus(value: unknown): PublishStatus {
++  if (value === PublishStatus.REVIEW) return PublishStatus.REVIEW;
++  if (value === PublishStatus.PUBLISHED) return PublishStatus.PUBLISHED;
++  if (value === PublishStatus.ARCHIVED) return PublishStatus.ARCHIVED;
++  return PublishStatus.DRAFT;
++}
++
++function buildData(body: Record<string, unknown>) {
++  return {
++    category: String(body.category || '').trim(),
++    title: String(body.title || '').trim(),
++    contentHtml: String(body.contentHtml || '').trim(),
++    orderNo: toInt(body.orderNo, 0),
++    status: normalizeStatus(body.status),
++  };
++}
++
++export async function POST(request: Request) {
++  const user = await ensureTeacher();
++  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++  const body = (await request.json()) as Record<string, unknown>;
++  const data = buildData(body);
++  if (!data.category || !data.title || !data.contentHtml) {
++    return NextResponse.json({ error: 'Kategori, judul, dan isi tips wajib diisi.' }, { status: 400 });
++  }
++
++  const item = await prisma.tkadTip.create({ data: { ...data, authorId: user.id } });
++  return NextResponse.json({ data: serialize(item) });
++}
++
++export async function PUT(request: Request) {
++  const user = await ensureTeacher();
++  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++  const body = (await request.json()) as Record<string, unknown>;
++  const id = String(body.id || '');
++  if (!id) return NextResponse.json({ error: 'ID tips wajib ada.' }, { status: 400 });
++  const owned = await prisma.tkadTip.findUnique({ where: { id } });
++  if (!owned || owned.authorId !== user.id) return NextResponse.json({ error: 'Tips TKAD tidak ditemukan.' }, { status: 404 });
++
++  const data = buildData(body);
++  if (!data.category || !data.title || !data.contentHtml) {
++    return NextResponse.json({ error: 'Kategori, judul, dan isi tips wajib diisi.' }, { status: 400 });
++  }
++  const item = await prisma.tkadTip.update({ where: { id }, data });
++  return NextResponse.json({ data: serialize(item) });
++}
++
++export async function DELETE(request: Request) {
++  const user = await ensureTeacher();
++  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++  const body = (await request.json()) as Record<string, unknown>;
++  const id = String(body.id || '');
++  const owned = await prisma.tkadTip.findUnique({ where: { id } });
++  if (!owned || owned.authorId !== user.id) return NextResponse.json({ error: 'Tips TKAD tidak ditemukan.' }, { status: 404 });
++
++  await prisma.tkadTip.delete({ where: { id } });
++  return NextResponse.json({ ok: true });
++}
+diff --git a/apps/guru/app/api/topics/route.ts b/apps/guru/app/api/topics/route.ts
+new file mode 100644
+index 0000000..ebe6212
+--- /dev/null
++++ b/apps/guru/app/api/topics/route.ts
+@@ -0,0 +1,93 @@
++import { NextResponse } from 'next/server';
++import { prisma, UserRole } from '@sh/db';
++import { getCurrentUser, slugify, toInt } from '@sh/core';
++
++async function ensureTeacher() {
++  const user = await getCurrentUser();
++  return user && user.role === UserRole.GURU ? user : null;
++}
++
++function serialize(topic: {
++  id: string;
++  title: string;
++  slug: string;
++  subject: string;
++  description: string | null;
++  orderNo: number;
++}) {
++  return {
++    id: topic.id,
++    title: topic.title,
++    slug: topic.slug,
++    subject: topic.subject,
++    description: topic.description || '',
++    orderNo: String(topic.orderNo),
++  };
++}
++
++function topicData(body: Record<string, unknown>) {
++  const title = String(body.title || '').trim();
++  return {
++    title,
++    slug: slugify(title),
++    subject: String(body.subject || 'IPA SMP').trim() || 'IPA SMP',
++    description: body.description ? String(body.description) : null,
++    orderNo: toInt(body.orderNo, 0),
++  };
++}
++
++export async function POST(request: Request) {
++  if (!(await ensureTeacher())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++  const body = (await request.json()) as Record<string, unknown>;
++  const data = topicData(body);
++  if (!data.title || !data.slug) return NextResponse.json({ error: 'Judul topik wajib diisi.' }, { status: 400 });
++
++  try {
++    const topic = await prisma.topic.create({ data });
++    return NextResponse.json({ data: serialize(topic) });
++  } catch (error) {
++    console.error('POST /api/topics failed:', error);
++    return NextResponse.json({ error: 'Judul atau slug topik sudah digunakan.' }, { status: 409 });
++  }
++}
++
++export async function PUT(request: Request) {
++  if (!(await ensureTeacher())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++  const body = (await request.json()) as Record<string, unknown>;
++  if (!body.id) return NextResponse.json({ error: 'ID topik wajib ada.' }, { status: 400 });
++  const data = topicData(body);
++  if (!data.title || !data.slug) return NextResponse.json({ error: 'Judul topik wajib diisi.' }, { status: 400 });
++
++  try {
++    const topic = await prisma.topic.update({ where: { id: String(body.id) }, data });
++    return NextResponse.json({ data: serialize(topic) });
++  } catch (error) {
++    console.error('PUT /api/topics failed:', error);
++    return NextResponse.json({ error: 'Topik tidak ditemukan atau judulnya sudah digunakan.' }, { status: 409 });
++  }
++}
++
++export async function DELETE(request: Request) {
++  if (!(await ensureTeacher())) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
++  const body = (await request.json()) as Record<string, unknown>;
++  const id = String(body.id || '');
++  if (!id) return NextResponse.json({ error: 'ID topik wajib ada.' }, { status: 400 });
++
++  const usage = await prisma.topic.findUnique({
++    where: { id },
++    select: {
++      _count: { select: { materials: true, blueprints: true, questions: true } },
++    },
++  });
++  if (!usage) return NextResponse.json({ error: 'Topik tidak ditemukan.' }, { status: 404 });
++  const usedBy = usage._count.materials + usage._count.blueprints + usage._count.questions;
++  if (usedBy > 0) {
++    return NextResponse.json(
++      { error: 'Topik masih digunakan oleh materi, kisi-kisi, atau soal. Pindahkan data terkait sebelum menghapus.' },
++      { status: 409 },
++    );
++  }
++
++  await prisma.topic.delete({ where: { id } });
++  return NextResponse.json({ ok: true });
++}
+diff --git a/apps/guru/app/api/tryouts/route.ts b/apps/guru/app/api/tryouts/route.ts
+index 059ea4f..ec9a6d9 100644
+--- a/apps/guru/app/api/tryouts/route.ts
++++ b/apps/guru/app/api/tryouts/route.ts
+@@ -21,6 +21,7 @@ async function serialize(tryoutId: string) {
+     startAt: item.startAt ? item.startAt.toISOString().slice(0, 16) : '',
+     endAt: item.endAt ? item.endAt.toISOString().slice(0, 16) : '',
+     questionCodes: item.questions.map((row) => row.question.code).join('\n'),
++    questionCount: String(item.questions.length),
+     rulesHtml: item.rulesHtml || '',
+   };
+ }
+diff --git a/apps/guru/app/bank-soal/page.tsx b/apps/guru/app/bank-soal/page.tsx
+index 189a362..44ac7f1 100644
+--- a/apps/guru/app/bank-soal/page.tsx
++++ b/apps/guru/app/bank-soal/page.tsx
+@@ -57,7 +57,9 @@ export default async function BankSoalPage({ searchParams }: { searchParams: Pro
+       id: question.id,
+       code: question.code,
+       topicId: question.topicId,
++      topicLabel: question.topic.title,
+       blueprintId: question.blueprintId || '',
++      blueprintLabel: question.blueprint?.code || 'Tanpa kisi-kisi',
+       difficulty: question.difficulty || '',
+       status: question.status,
+       stimulusOrder: String(question.stimulusOrder),
+@@ -107,8 +109,8 @@ export default async function BankSoalPage({ searchParams }: { searchParams: Pro
+         initialRows={initialRows}
+         tableColumns={[
+           { key: 'code', label: 'Kode soal' },
+-          { key: 'topicId', label: 'Topik' },
+-          { key: 'blueprintId', label: 'Kisi-kisi' },
++          { key: 'topicLabel', label: 'Topik' },
++          { key: 'blueprintLabel', label: 'Kisi-kisi' },
+           { key: 'questionType', label: 'Jenis' },
+           { key: 'scoringMode', label: 'Penilaian' },
+           { key: 'difficulty', label: 'Kesulitan' },
+diff --git a/apps/guru/app/belajar/page.tsx b/apps/guru/app/belajar/page.tsx
+new file mode 100644
+index 0000000..324a587
+--- /dev/null
++++ b/apps/guru/app/belajar/page.tsx
+@@ -0,0 +1,95 @@
++import { prisma, UserRole } from '@sh/db';
++import { requireRole } from '@sh/core';
++import { EditableManager, type FieldDef } from '../../components/editable-manager';
++
++export default async function BelajarPage() {
++  const user = await requireRole(UserRole.GURU);
++  const [topics, materials] = await Promise.all([
++    prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
++    prisma.material.findMany({
++      where: { authorId: user.id },
++      include: {
++        topic: true,
++        objectives: { orderBy: { orderNo: 'asc' } },
++        sections: { orderBy: { orderNo: 'asc' } },
++      },
++      orderBy: { updatedAt: 'desc' },
++    }),
++  ]);
++
++  const topicFields: FieldDef[] = [
++    { name: 'title', label: 'Nama topik' },
++    { name: 'subject', label: 'Mata pelajaran / rumpun', placeholder: 'Contoh: IPA SMP' },
++    { name: 'orderNo', label: 'Urutan tampil' },
++    { name: 'description', label: 'Deskripsi topik', type: 'textarea' },
++  ];
++
++  const materialFields: FieldDef[] = [
++    { name: 'title', label: 'Judul materi' },
++    { name: 'topicId', label: 'Topik', type: 'select', options: topics.map((topic) => ({ value: topic.id, label: topic.title })) },
++    { name: 'level', label: 'Level / kelas' },
++    { name: 'status', label: 'Status', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
++    { name: 'summaryHtml', label: 'Ringkasan materi (HTML / LaTeX)', type: 'richtext' },
++    { name: 'objectivesText', label: 'Tujuan pembelajaran (1 baris = 1 tujuan)', type: 'textarea' },
++    { name: 'sectionsHtml', label: 'Isi materi utama (HTML / LaTeX)', type: 'richtext' },
++    { name: 'coverImageUrl', label: 'URL gambar cover', full: true },
++  ];
++
++  const topicRows = topics.map((topic) => ({
++    id: topic.id,
++    title: topic.title,
++    slug: topic.slug,
++    subject: topic.subject,
++    description: topic.description || '',
++    orderNo: String(topic.orderNo),
++  }));
++
++  const materialRows = materials.map((material) => ({
++    id: material.id,
++    title: material.title,
++    topicId: material.topicId,
++    topicLabel: material.topic.title,
++    level: material.level || '',
++    status: material.status,
++    summaryHtml: material.summaryHtml || material.summaryText || '',
++    objectivesText: material.objectives.map((item) => item.objective).join('\n'),
++    sectionsHtml: material.sections.map((item) => item.contentHtml || item.contentText || '').join('\n<hr />\n'),
++    coverImageUrl: material.coverImageUrl || '',
++  }));
++
++  return (
++    <div className="stack">
++      <EditableManager
++        eyebrow="Belajar • Topik"
++        title="Kelola topik pembelajaran"
++        description="Tambah, ubah, urutkan, dan hapus topik. Topik yang sedang digunakan tidak dapat dihapus agar relasi materi dan soal tetap aman. Setelah menambah topik baru, muat ulang halaman agar topik muncul di pilihan materi."
++        entityName="topik"
++        endpoint="/api/topics"
++        fields={topicFields}
++        initialRows={topicRows}
++        tableColumns={[
++          { key: 'orderNo', label: 'Urutan' },
++          { key: 'title', label: 'Topik' },
++          { key: 'subject', label: 'Rumpun' },
++          { key: 'description', label: 'Deskripsi' },
++        ]}
++      />
++
++      <EditableManager
++        eyebrow="Belajar • Materi"
++        title="Kelola materi belajar"
++        description="Guru dapat membuat, mengedit, dan memublikasikan materi berdasarkan topik. Editor mendukung HTML ringan dan LaTeX."
++        entityName="materi"
++        endpoint="/api/materials"
++        fields={materialFields}
++        initialRows={materialRows}
++        tableColumns={[
++          { key: 'title', label: 'Judul materi' },
++          { key: 'topicLabel', label: 'Topik' },
++          { key: 'level', label: 'Level' },
++          { key: 'status', label: 'Status' },
++        ]}
++      />
++    </div>
++  );
++}
+diff --git a/apps/guru/app/globals.css b/apps/guru/app/globals.css
+index 967f566..b5f2c4e 100644
+--- a/apps/guru/app/globals.css
++++ b/apps/guru/app/globals.css
+@@ -1129,3 +1129,63 @@ body { font-family: var(--app-font, Inter, ui-sans-serif, system-ui, -apple-syst
+   .tf-row { grid-template-columns: 1fr; }
+   .tf-actions { justify-content: flex-start; }
+ }
++
++/* Reusable data-table search and pagination controls */
++.manager-table-heading,
++.manager-table-tools,
++.manager-pagination,
++.manager-pagination-actions {
++  display: flex;
++  align-items: center;
++  gap: 12px;
++}
++.manager-table-heading,
++.manager-pagination { justify-content: space-between; }
++.manager-table-tools { align-items: stretch; }
++.manager-search {
++  flex: 1;
++  min-width: 220px;
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  padding: 0 14px;
++  border: 1px solid var(--border);
++  border-radius: 14px;
++  background: var(--surface);
++  color: var(--muted);
++}
++.manager-search input {
++  width: 100%;
++  min-height: 44px;
++  border: 0;
++  outline: 0;
++  background: transparent;
++  color: var(--text);
++}
++.manager-page-size {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  color: var(--muted);
++  font-size: .9rem;
++  white-space: nowrap;
++}
++.manager-page-size .select { min-width: 92px; }
++.manager-pagination { color: var(--muted); font-size: .9rem; }
++.manager-pagination-actions strong,
++.manager-pagination > strong { color: var(--text); white-space: nowrap; }
++.manager-pagination-actions .button-secondary {
++  width: 40px;
++  height: 40px;
++  padding: 0;
++  display: inline-grid;
++  place-items: center;
++}
++
++@media (max-width: 700px) {
++  .manager-table-heading,
++  .manager-table-tools,
++  .manager-pagination { align-items: stretch; flex-direction: column; }
++  .manager-page-size { justify-content: space-between; }
++  .manager-pagination-actions { justify-content: space-between; }
++}
+diff --git a/apps/guru/app/materi/page.tsx b/apps/guru/app/materi/page.tsx
+index 19ac52a..d43c681 100644
+--- a/apps/guru/app/materi/page.tsx
++++ b/apps/guru/app/materi/page.tsx
+@@ -1,50 +1,5 @@
+-import { prisma, UserRole } from '@sh/db';
+-import { requireRole } from '@sh/core';
+-import { EditableManager, type FieldDef } from '../../components/editable-manager';
++import { redirect } from 'next/navigation';
+ 
+-export default async function MateriPage() {
+-  const user = await requireRole(UserRole.GURU);
+-  const [topics, materials] = await Promise.all([
+-    prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
+-    prisma.material.findMany({
+-      where: { authorId: user.id },
+-      include: { objectives: { orderBy: { orderNo: 'asc' } }, sections: { orderBy: { orderNo: 'asc' } } },
+-      orderBy: { updatedAt: 'desc' },
+-    }),
+-  ]);
+-
+-  const fields: FieldDef[] = [
+-    { name: 'title', label: 'Judul materi' },
+-    { name: 'topicId', label: 'Topik', type: 'select', options: topics.map((topic) => ({ value: topic.id, label: topic.title })) },
+-    { name: 'level', label: 'Level / kelas' },
+-    { name: 'status', label: 'Status', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
+-    { name: 'summaryHtml', label: 'Ringkasan materi (HTML / LaTeX)', type: 'richtext' },
+-    { name: 'objectivesText', label: 'Tujuan pembelajaran (1 baris = 1 tujuan)', type: 'textarea' },
+-    { name: 'sectionsHtml', label: 'Isi materi utama (HTML / LaTeX)', type: 'richtext' },
+-    { name: 'coverImageUrl', label: 'URL gambar cover', full: true },
+-  ];
+-
+-  const initialRows = materials.map((material) => ({
+-    id: material.id,
+-    title: material.title,
+-    topicId: material.topicId,
+-    level: material.level || '',
+-    status: material.status,
+-    summaryHtml: material.summaryHtml || material.summaryText || '',
+-    objectivesText: material.objectives.map((item) => item.objective).join('\n'),
+-    sectionsHtml: material.sections.map((item) => item.contentHtml || item.contentText || '').join('\n<hr />\n'),
+-    coverImageUrl: material.coverImageUrl || '',
+-  }));
+-
+-  return (
+-    <EditableManager
+-      eyebrow="Materi"
+-      title="Kelola materi belajar"
+-      description="WYSIWYG mendukung HTML ringan dan LaTeX. Semua materi bisa disimpan sebagai draft lalu dipublish."
+-      entityName="materi"
+-      endpoint="/api/materials"
+-      fields={fields}
+-      initialRows={initialRows}
+-    />
+-  );
++export default function MateriRedirectPage() {
++  redirect('/belajar');
+ }
+diff --git a/apps/guru/app/page.tsx b/apps/guru/app/page.tsx
+index c3037db..ff9eabb 100644
+--- a/apps/guru/app/page.tsx
++++ b/apps/guru/app/page.tsx
+@@ -1,31 +1,31 @@
+ import { prisma, UserRole } from '@sh/db';
+ import { requireRole } from '@sh/core';
+-import { BookOpenCheck, ClipboardList, FileText, Library, ListChecks, MonitorCog } from 'lucide-react';
++import { BookOpenCheck, ClipboardList, FileText, Library, Lightbulb, MonitorCog } from 'lucide-react';
+ import { PageHero } from '../components/page-hero';
+ import { StatGrid } from '../components/stat-grid';
+ 
+ export default async function Page() {
+   const user = await requireRole(UserRole.GURU);
+-  const [materials, questions, blueprints, tryouts, attempts] = await Promise.all([
++  const [materials, tips, questions, tryouts, attempts] = await Promise.all([
+     prisma.material.count({ where: { authorId: user.id } }),
++    prisma.tkadTip.count({ where: { authorId: user.id } }),
+     prisma.question.count({ where: { authorId: user.id } }),
+-    prisma.blueprint.count(),
+     prisma.tryout.count({ where: { authorId: user.id } }),
+     prisma.attempt.count({ where: { tryout: { authorId: user.id } } }),
+   ]);
+ 
+   const stats = [
+     { label: 'Materi saya', value: String(materials), note: 'Materi dapat diedit kapan saja.', badge: 'Konten' },
+-    { label: 'Kisi-kisi', value: String(blueprints), note: 'Blueprint per tryout.', badge: 'Kisi' },
++    { label: 'Tips TKAD', value: String(tips), note: 'Strategi belajar untuk siswa.', badge: 'Tips' },
+     { label: 'Bank soal', value: String(questions), note: 'Soal terhubung kisi-kisi.', badge: 'Soal' },
+     { label: 'Tryout saya', value: String(tryouts), note: 'Sesi bisa dijeda dan dipantau.', badge: 'CBT' },
+   ];
+ 
+   const cards = [
+-    { title: 'Susun materi', text: 'Buat materi ringkas, tambahkan LaTeX, gambar, dan tujuan pembelajaran.', icon: BookOpenCheck, href: '/materi' },
+-    { title: 'Buat kisi-kisi', text: 'Petakan indikator berdasarkan Tryout 1, Tryout 2, atau paket lain.', icon: ListChecks, href: '/kisi-kisi' },
+-    { title: 'Kelola bank soal', text: 'Masukkan soal per paket tryout, lengkap dengan opsi dan pembahasan.', icon: Library, href: '/bank-soal' },
++    { title: 'Kelola Belajar', text: 'Buat dan edit topik, materi, tujuan pembelajaran, LaTeX, dan media.', icon: BookOpenCheck, href: '/belajar' },
++    { title: 'Kelola Tips TKAD', text: 'Susun strategi, urutan tips, dan status publikasi untuk siswa.', icon: Lightbulb, href: '/tips-tkad' },
+     { title: 'Rakit tryout', text: 'Tentukan durasi, status, aturan, dan daftar kode soal.', icon: ClipboardList, href: '/tryout' },
++    { title: 'Kelola bank soal', text: 'Masukkan soal per paket tryout, lengkap dengan opsi dan pembahasan.', icon: Library, href: '/bank-soal' },
+   ];
+ 
+   return (
+@@ -33,7 +33,7 @@ export default async function Page() {
+       <PageHero
+         eyebrow="Guru"
+         title={`Selamat datang, ${user.fullName}`}
+-        description="Dashboard guru dibuat lebih informatif untuk mengelola materi, kisi-kisi, bank soal, tryout, dan monitoring dalam satu alur."
++        description="Kelola Belajar, Tips TKAD, Tryout, dan Bank Soal dari satu portal, lalu pantau pelaksanaan ujian siswa."
+       />
+       <StatGrid items={stats} />
+       <div className="dashboard-card-grid">
+@@ -59,6 +59,7 @@ export default async function Page() {
+           </div>
+           <div className="kv-list">
+             <div><strong>{materials}</strong><span> materi tersimpan</span></div>
++            <div><strong>{tips}</strong><span> tips TKAD tersimpan</span></div>
+             <div><strong>{questions}</strong><span> soal siap dikelola</span></div>
+             <div><strong>{tryouts}</strong><span> paket tryout</span></div>
+             <div><strong>{attempts}</strong><span> attempt siswa</span></div>
+@@ -72,7 +73,7 @@ export default async function Page() {
+             </div>
+             <MonitorCog size={24} />
+           </div>
+-          <div className="notice">Urutan paling aman: buat kisi-kisi, susun bank soal, rakit tryout, lalu pantau hasil siswa.</div>
++          <div className="notice">Urutan kerja: susun topik dan materi, publikasikan Tips TKAD, siapkan bank soal, rakit tryout, lalu pantau hasil siswa.</div>
+         </section>
+       </div>
+     </div>
+diff --git a/apps/guru/app/tips-tkad/page.tsx b/apps/guru/app/tips-tkad/page.tsx
+new file mode 100644
+index 0000000..7eb7ead
+--- /dev/null
++++ b/apps/guru/app/tips-tkad/page.tsx
+@@ -0,0 +1,46 @@
++import { prisma, UserRole } from '@sh/db';
++import { requireRole } from '@sh/core';
++import { EditableManager, type FieldDef } from '../../components/editable-manager';
++
++export default async function TipsTkadPage() {
++  const user = await requireRole(UserRole.GURU);
++  const tips = await prisma.tkadTip.findMany({
++    where: { authorId: user.id },
++    orderBy: [{ orderNo: 'asc' }, { updatedAt: 'desc' }],
++  });
++
++  const fields: FieldDef[] = [
++    { name: 'category', label: 'Kategori', placeholder: 'Contoh: Strategi inti' },
++    { name: 'title', label: 'Judul tips' },
++    { name: 'orderNo', label: 'Urutan tampil' },
++    { name: 'status', label: 'Status', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
++    { name: 'contentHtml', label: 'Isi Tips TKAD', type: 'richtext' },
++  ];
++
++  const initialRows = tips.map((tip) => ({
++    id: tip.id,
++    category: tip.category,
++    title: tip.title,
++    orderNo: String(tip.orderNo),
++    status: tip.status,
++    contentHtml: tip.contentHtml,
++  }));
++
++  return (
++    <EditableManager
++      eyebrow="Tips TKAD"
++      title="Kelola strategi dan tips TKAD"
++      description="Guru dapat menambah, mengubah urutan, mengedit isi, dan menentukan status publikasi. Hanya tips berstatus PUBLISHED yang tampil pada aplikasi siswa."
++      entityName="tips TKAD"
++      endpoint="/api/tkad-tips"
++      fields={fields}
++      initialRows={initialRows}
++      tableColumns={[
++        { key: 'orderNo', label: 'Urutan' },
++        { key: 'category', label: 'Kategori' },
++        { key: 'title', label: 'Judul' },
++        { key: 'status', label: 'Status' },
++      ]}
++    />
++  );
++}
+diff --git a/apps/guru/app/tryout/page.tsx b/apps/guru/app/tryout/page.tsx
+index afbca08..ac70139 100644
+--- a/apps/guru/app/tryout/page.tsx
++++ b/apps/guru/app/tryout/page.tsx
+@@ -33,6 +33,7 @@ export default async function TryoutPage() {
+     startAt: item.startAt ? item.startAt.toISOString().slice(0, 16) : '',
+     endAt: item.endAt ? item.endAt.toISOString().slice(0, 16) : '',
+     questionCodes: item.questions.map((row) => row.question.code).join('\n'),
++    questionCount: String(item.questions.length),
+     rulesHtml: item.rulesHtml || '',
+   }));
+ 
+@@ -46,6 +47,13 @@ export default async function TryoutPage() {
+         endpoint="/api/tryouts"
+         fields={fields}
+         initialRows={initialRows}
++        tableColumns={[
++          { key: 'title', label: 'Judul tryout' },
++          { key: 'durationMinutes', label: 'Durasi' },
++          { key: 'questionCount', label: 'Jumlah soal' },
++          { key: 'status', label: 'Status' },
++          { key: 'startAt', label: 'Mulai' },
++        ]}
+       />
+       <section className="card stack">
+         <strong>Bank soal tersedia</strong>
+diff --git a/apps/guru/components/app-shell.tsx b/apps/guru/components/app-shell.tsx
+index 9f97f35..a9af86e 100644
+--- a/apps/guru/components/app-shell.tsx
++++ b/apps/guru/components/app-shell.tsx
+@@ -39,6 +39,7 @@ import {
+   ShieldCheck,
+   BookMarked,
+   BarChart3,
++  Lightbulb,
+ } from 'lucide-react';
+ 
+ export type NavItem = { label: string; href: string; section?: string; icon?: string };
+@@ -69,6 +70,7 @@ const iconMap = {
+   MessageCircleMore,
+   UsersRound,
+   BellRing,
++  Lightbulb,
+ };
+ 
+ const loginHighlightIcons = [ShieldCheck, BookMarked, BarChart3] as const;
+diff --git a/apps/guru/components/editable-manager.tsx b/apps/guru/components/editable-manager.tsx
+index 14d26e2..515c20b 100644
+--- a/apps/guru/components/editable-manager.tsx
++++ b/apps/guru/components/editable-manager.tsx
+@@ -1,7 +1,7 @@
+ 
+ 'use client';
+-import { useMemo, useState } from 'react';
+-import { Pencil, Trash2 } from 'lucide-react';
++import { useEffect, useMemo, useState } from 'react';
++import { ChevronLeft, ChevronRight, Pencil, Search, Trash2 } from 'lucide-react';
+ import { PageHero } from './page-hero';
+ import { RichEditor } from './rich-editor';
+ import { useToast } from './toast-provider';
+@@ -17,6 +17,7 @@ export type FieldDef = {
+ };
+ 
+ export type TableColumn = { key: string; label: string };
++type PageSize = 10 | 20 | 40 | 60 | 'all';
+ 
+ function optionValue(option: SelectOption) {
+   return typeof option === 'string' ? option : option.value;
+@@ -75,8 +76,34 @@ export function EditableManager({
+   const [selectedId, setSelectedId] = useState<string | null>(initialRows[0]?.id ?? null);
+   const [form, setForm] = useState<Record<string, string>>(initialRows[0] ? { ...initialRows[0], password: '' } : blankForm);
+   const [loading, setLoading] = useState(false);
++  const [searchText, setSearchText] = useState('');
++  const [pageSize, setPageSize] = useState<PageSize>(10);
++  const [currentPage, setCurrentPage] = useState(1);
+ 
+   const visibleColumns = tableColumns || fields.slice(0, 5).map((field) => ({ key: field.name, label: field.label }));
++  const filteredRows = useMemo(() => {
++    const keyword = stripHtml(searchText).toLocaleLowerCase('id-ID');
++    if (!keyword) return rows;
++    return rows.filter((row) =>
++      Object.values(row).some((value) => stripHtml(String(value || '')).toLocaleLowerCase('id-ID').includes(keyword)),
++    );
++  }, [rows, searchText]);
++  const totalPages = pageSize === 'all' ? 1 : Math.max(1, Math.ceil(filteredRows.length / pageSize));
++  const pagedRows = useMemo(() => {
++    if (pageSize === 'all') return filteredRows;
++    const start = (currentPage - 1) * pageSize;
++    return filteredRows.slice(start, start + pageSize);
++  }, [currentPage, filteredRows, pageSize]);
++  const rangeStart = filteredRows.length === 0 ? 0 : pageSize === 'all' ? 1 : (currentPage - 1) * pageSize + 1;
++  const rangeEnd = pageSize === 'all' ? filteredRows.length : Math.min(currentPage * pageSize, filteredRows.length);
++
++  useEffect(() => {
++    setCurrentPage(1);
++  }, [searchText, pageSize]);
++
++  useEffect(() => {
++    setCurrentPage((page) => Math.min(page, totalPages));
++  }, [totalPages]);
+ 
+   const pick = (row: Record<string, string>) => {
+     setSelectedId(row.id);
+@@ -106,6 +133,7 @@ export function EditableManager({
+       setRows((prev) =>
+         prev.some((item) => item.id === next.id) ? prev.map((item) => (item.id === next.id ? next : item)) : [next, ...prev],
+       );
++      setCurrentPage(1);
+       setForm({ ...next, password: '' });
+       setSelectedId(next.id);
+       notify('Sudah tersimpan', `${entityName} berhasil disimpan.`);
+@@ -220,12 +248,46 @@ export function EditableManager({
+           </div>
+         </section>
+         <section className="card stack">
+-          <div>
+-            <div className="eyebrow">Data tersimpan</div>
+-            <strong>Tabel {entityName}</strong>
++          <div className="manager-table-heading">
++            <div>
++              <div className="eyebrow">Data tersimpan</div>
++              <strong>Tabel {entityName}</strong>
++            </div>
++            <span className="badge">{filteredRows.length} data</span>
++          </div>
++          <div className="manager-table-tools">
++            <label className="manager-search" aria-label={`Cari ${entityName}`}>
++              <Search size={17} />
++              <input
++                type="search"
++                value={searchText}
++                onChange={(event) => setSearchText(event.target.value)}
++                placeholder={`Cari ${entityName}, topik, kode, atau status...`}
++              />
++            </label>
++            <label className="manager-page-size">
++              <span>Tampilkan</span>
++              <select
++                className="select"
++                value={String(pageSize)}
++                onChange={(event) => {
++                  const value = event.target.value;
++                  setPageSize(value === 'all' ? 'all' : (Number(value) as PageSize));
++                }}
++              >
++                <option value="10">10</option>
++                <option value="20">20</option>
++                <option value="40">40</option>
++                <option value="60">60</option>
++                <option value="all">Semua</option>
++              </select>
++            </label>
+           </div>
+           {rows.length === 0 ? <div className="empty-state">Belum ada data.</div> : null}
+-          {rows.length > 0 ? (
++          {rows.length > 0 && filteredRows.length === 0 ? (
++            <div className="empty-state">Tidak ada data yang cocok dengan pencarian “{searchText}”.</div>
++          ) : null}
++          {pagedRows.length > 0 ? (
+             <div className="table-wrapper">
+               <table className="data-table">
+                 <thead>
+@@ -237,7 +299,7 @@ export function EditableManager({
+                   </tr>
+                 </thead>
+                 <tbody>
+-                  {rows.map((row) => (
++                  {pagedRows.map((row) => (
+                     <tr key={row.id} className={selectedId === row.id ? 'is-selected' : ''}>
+                       {visibleColumns.map((column) => (
+                         <td key={column.key} title={stripHtml(String(row[column.key] || '-'))}>
+@@ -262,6 +324,38 @@ export function EditableManager({
+               </table>
+             </div>
+           ) : null}
++          {filteredRows.length > 0 ? (
++            <div className="manager-pagination">
++              <span>
++                Menampilkan {rangeStart}–{rangeEnd} dari {filteredRows.length} data
++              </span>
++              {pageSize !== 'all' ? (
++                <div className="manager-pagination-actions">
++                  <button
++                    className="button-secondary"
++                    type="button"
++                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
++                    disabled={currentPage <= 1}
++                    aria-label="Halaman sebelumnya"
++                  >
++                    <ChevronLeft size={16} />
++                  </button>
++                  <strong>Halaman {currentPage} dari {totalPages}</strong>
++                  <button
++                    className="button-secondary"
++                    type="button"
++                    onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
++                    disabled={currentPage >= totalPages}
++                    aria-label="Halaman berikutnya"
++                  >
++                    <ChevronRight size={16} />
++                  </button>
++                </div>
++              ) : (
++                <strong>Semua data ditampilkan</strong>
++              )}
++            </div>
++          ) : null}
+         </section>
+       </div>
+     </div>
+diff --git a/apps/guru/lib/app.ts b/apps/guru/lib/app.ts
+index a0eda69..9c7db3f 100644
+--- a/apps/guru/lib/app.ts
++++ b/apps/guru/lib/app.ts
+@@ -2,12 +2,12 @@ import type { UserRole } from '@sh/db';
+ 
+ export const appMeta = {
+   appName: 'Sains Masemba',
+-  appTagline: 'Portal guru untuk materi, kisi-kisi, dan tryout.',
++  appTagline: 'Portal guru untuk konten belajar dan evaluasi.',
+   role: 'GURU' as UserRole,
+   roleLabel: 'Guru',
+   loginBadge: 'Portal Akademik',
+-  loginTitle: 'Kelola Materi, Kisi-kisi & Tryout dengan Lebih Rapi',
+-  loginDescription: 'Guru dapat menyusun materi, mengimpor soal, mengatur sesi tryout, dan memantau peserta dalam satu alur kerja yang nyaman.',
++  loginTitle: 'Kelola Konten Belajar & Evaluasi dengan Lebih Rapi',
++  loginDescription: 'Guru dapat menyusun topik, materi, Tips TKAD, bank soal, mengatur tryout, dan memantau peserta dalam satu alur kerja.',
+   loginHighlights: [
+     { title: 'Materi lebih menarik', text: 'Input konten WYSIWYG, LaTeX, media, dan import Excel dalam satu dashboard.' },
+     { title: 'Tryout lebih terkontrol', text: 'Jadwalkan, jeda, lanjutkan, dan beri peringatan saat sesi sedang berjalan.' },
+diff --git a/apps/guru/lib/nav.ts b/apps/guru/lib/nav.ts
+index fa9d6d6..82198a0 100644
+--- a/apps/guru/lib/nav.ts
++++ b/apps/guru/lib/nav.ts
+@@ -2,10 +2,10 @@ import type { NavItem } from '../components/app-shell';
+ 
+ export const navItems: NavItem[] = [
+   { label: 'Dashboard', href: '/', section: 'Utama', icon: 'LayoutDashboard' },
+-  { label: 'Materi', href: '/materi', section: 'Konten', icon: 'NotebookPen' },
+-  { label: 'Kisi-kisi', href: '/kisi-kisi', section: 'Konten', icon: 'ListChecks' },
++  { label: 'Belajar', href: '/belajar', section: 'Konten', icon: 'BookOpenText' },
++  { label: 'Tips TKAD', href: '/tips-tkad', section: 'Konten', icon: 'Lightbulb' },
++  { label: 'Tryout', href: '/tryout', section: 'Konten', icon: 'ClipboardList' },
+   { label: 'Bank Soal', href: '/bank-soal', section: 'Konten', icon: 'Library' },
+-  { label: 'Tryout', href: '/tryout', section: 'Ujian', icon: 'ClipboardList' },
+   { label: 'Monitoring Tryout', href: '/monitoring-tryout', section: 'Ujian', icon: 'MonitorCog' },
+   { label: 'Import Excel', href: '/imports', section: 'Operasional', icon: 'FileSpreadsheet' },
+   { label: 'Profil', href: '/profil', section: 'Akun', icon: 'User' },
+diff --git a/apps/siswa/app/tips-tkad/page.tsx b/apps/siswa/app/tips-tkad/page.tsx
+index 5c187fc..3911c95 100644
+--- a/apps/siswa/app/tips-tkad/page.tsx
++++ b/apps/siswa/app/tips-tkad/page.tsx
+@@ -1,190 +1,33 @@
+-import { UserRole } from '@sh/db';
++import { prisma, UserRole } from '@sh/db';
+ import { requireRole } from '@sh/core';
+-import {
+-  ArrowRight,
+-  BookOpenCheck,
+-  Brain,
+-  Calculator,
+-  CheckCircle2,
+-  CircleCheckBig,
+-  Clock3,
+-  Eye,
+-  FlaskConical,
+-  Gauge,
+-  Image as ImageIcon,
+-  Lightbulb,
+-  ListChecks,
+-  ScanSearch,
+-  ShieldCheck,
+-  Sparkles,
+-  Table2,
+-  Target,
+-  TriangleAlert,
+-} from 'lucide-react';
++import { CheckCircle2, Lightbulb, ShieldCheck, Sparkles } from 'lucide-react';
+ import { PageHero } from '../../components/page-hero';
+ 
+-const quickSteps = [
+-  {
+-    no: '01',
+-    title: 'Baca yang ditanya dulu',
+-    text: 'Temukan target jawaban sebelum membaca stimulus panjang. Ini mencegah kamu tersesat pada informasi yang tidak diperlukan.',
+-    icon: Target,
+-  },
+-  {
+-    no: '02',
+-    title: 'Tandai kata kunci',
+-    text: 'Cari istilah, angka, satuan, hubungan sebab-akibat, atau kalimat pembanding yang langsung berkaitan dengan pertanyaan.',
+-    icon: ScanSearch,
+-  },
+-  {
+-    no: '03',
+-    title: 'Pisahkan data dan pengalih',
+-    text: 'Tidak semua informasi dalam stimulus harus digunakan. Ambil hanya bukti yang relevan dengan konsep yang ditanyakan.',
+-    icon: Eye,
+-  },
+-  {
+-    no: '04',
+-    title: 'Tentukan konsep IPA',
+-    text: 'Ubah cerita menjadi konsep: gaya, energi, organ, pH, pewarisan, ekologi, atau konsep lain yang tepat.',
+-    icon: Brain,
+-  },
+-  {
+-    no: '05',
+-    title: 'Uji opsi dan cek kewajaran',
+-    text: 'Periksa setiap opsi terhadap data dan konsep. Untuk hitungan, cek satuan serta apakah hasilnya masuk akal secara ilmiah.',
+-    icon: ShieldCheck,
+-  },
+-];
++type PublishedTip = {
++  id: string;
++  category: string;
++  title: string;
++  contentHtml: string;
++  orderNo: number;
++};
+ 
+-const formatTips = [
+-  {
+-    title: 'Teks literasi panjang',
+-    icon: BookOpenCheck,
+-    accent: 'brand',
+-    points: [
+-      'Baca pertanyaan terlebih dahulu.',
+-      'Cari kata kunci yang sama atau searti di stimulus.',
+-      'Jangan menganggap seluruh kalimat harus dipakai.',
+-      'Tarik kesimpulan hanya dari bukti yang tersedia.',
+-    ],
+-  },
+-  {
+-    title: 'Tabel dan grafik',
+-    icon: Table2,
+-    accent: 'warning',
+-    points: [
+-      'Baca judul, variabel, dan satuan.',
+-      'Cari nilai terbesar, terkecil, pola naik-turun, atau perbandingan.',
+-      'Bedakan data hasil pengamatan dengan kesimpulan.',
+-      'Jangan memperkirakan nilai yang tidak ditunjukkan data.',
+-    ],
+-  },
+-  {
+-    title: 'Gambar, organ, dan diagram',
+-    icon: ImageIcon,
+-    accent: 'accent',
+-    points: [
+-      'Kenali letak, bentuk, arah, dan hubungan antarbagian.',
+-      'Hubungkan struktur dengan fungsi, bukan hanya hafal nomor.',
+-      'Perhatikan legenda, panah, dan warna bila digunakan.',
+-      'Uji apakah label sesuai dengan proses yang dijelaskan.',
+-    ],
+-  },
+-  {
+-    title: 'Hitungan kontekstual',
+-    icon: Calculator,
+-    accent: 'brand',
+-    points: [
+-      'Tulis: diketahui → ditanya → konsep/rumus.',
+-      'Samakan satuan sebelum menghitung.',
+-      'Substitusikan angka setelah hubungan konsep jelas.',
+-      'Cek kewajaran hasil dan satuan akhir.',
+-    ],
+-  },
+-  {
+-    title: 'Pilihan ganda kompleks',
+-    icon: ListChecks,
+-    accent: 'warning',
+-    points: [
+-      'Nilai setiap opsi secara independen.',
+-      'Tulis secara mental: benar karena… / salah karena….',
+-      'Jangan berhenti setelah menemukan satu opsi benar.',
+-      'Pastikan jumlah pilihan benar sesuai instruksi soal.',
+-    ],
+-  },
+-  {
+-    title: 'Benar–salah',
+-    icon: CircleCheckBig,
+-    accent: 'accent',
+-    points: [
+-      'Anggap setiap pernyataan sebagai klaim terpisah.',
+-      'Periksa kata mutlak seperti selalu, hanya, semua, dan tidak pernah.',
+-      'Cek angka, urutan, arah proses, dan istilah ilmiah.',
+-      'Satu bagian keliru dapat membuat seluruh pernyataan salah.',
+-    ],
+-  },
+-  {
+-    title: 'Eksperimen dan data percobaan',
+-    icon: FlaskConical,
+-    accent: 'brand',
+-    points: [
+-      'Tentukan variabel bebas, terikat, dan kontrol.',
+-      'Baca pola data sebelum memilih kesimpulan.',
+-      'Kesimpulan harus sesuai rentang data yang diuji.',
+-      'Bedakan korelasi dengan hubungan sebab-akibat.',
+-    ],
+-  },
+-  {
+-    title: 'Soal dengan banyak jebakan opsi',
+-    icon: TriangleAlert,
+-    accent: 'warning',
+-    points: [
+-      'Eliminasi opsi yang salah konsep atau salah satuan.',
+-      'Waspadai opsi yang benar secara umum tetapi tidak menjawab pertanyaan.',
+-      'Bandingkan dua opsi tersisa menggunakan bukti stimulus.',
+-      'Jangan menambah asumsi yang tidak diberikan.',
+-    ],
+-  },
+-];
+-
+-const timeRounds = [
+-  {
+-    title: 'Putaran 1 — Amankan poin',
+-    text: 'Kerjakan soal yang langsung kamu pahami. Tandai soal yang membutuhkan hitungan panjang atau analisis mendalam.',
+-    badge: 'Cepat & yakin',
+-  },
+-  {
+-    title: 'Putaran 2 — Fokus analisis',
+-    text: 'Kembali ke soal tabel, grafik, hitungan, eksperimen, dan stimulus panjang. Gunakan langkah DATA → KONSEP → UJI.',
+-    badge: 'Teliti',
+-  },
+-  {
+-    title: 'Putaran 3 — Verifikasi akhir',
+-    text: 'Periksa soal yang masih ragu, satuan, tanda negatif, opsi kompleks, dan jawaban benar–salah sebelum mengakhiri.',
+-    badge: 'Cek ulang',
+-  },
+-];
+-
+-const traps = [
+-  'Terpancing angka yang sebenarnya tidak diperlukan.',
+-  'Langsung memakai rumus sebelum memahami apa yang ditanyakan.',
+-  'Menganggap opsi paling panjang pasti benar.',
+-  'Memilih kesimpulan yang lebih luas daripada data yang tersedia.',
+-  'Lupa konversi cm ke m atau cm² ke m².',
+-  'Mengira dua kejadian yang bersamaan pasti memiliki hubungan sebab-akibat.',
+-  'Pada pilihan kompleks, berhenti setelah menemukan satu opsi benar.',
+-  'Tidak membaca kata negatif seperti “tidak”, “kecuali”, atau “paling tidak tepat”.',
+-];
++const accents = ['brand', 'warning', 'accent'] as const;
+ 
+ export default async function TipsTkadPage() {
+   await requireRole(UserRole.SISWA);
++  const tips: PublishedTip[] = await prisma.tkadTip.findMany({
++    where: { status: 'PUBLISHED' },
++    orderBy: [{ orderNo: 'asc' }, { updatedAt: 'desc' }],
++  });
++
++  const categories: string[] = Array.from(new Set(tips.map((tip) => tip.category)));
+ 
+   return (
+     <div className="stack tips-page">
+       <PageHero
+         eyebrow="Tips TKAD"
+         title="Strategi cerdas mengerjakan soal TKAD IPA"
+-        description="Soal TKAD menilai kemampuan membaca informasi, memahami konsep, mengolah data, dan mengambil keputusan berbasis bukti. Gunakan strategi di halaman ini sebelum latihan dan tryout."
++        description="Soal TKAD menilai kemampuan membaca informasi, memahami konsep, mengolah data, dan mengambil keputusan berbasis bukti. Gunakan strategi yang disusun guru sebelum latihan dan tryout."
+       />
+ 
+       <section className="tips-hero card">
+@@ -204,142 +47,39 @@ export default async function TipsTkadPage() {
+         <div className="tips-hero-score" aria-label="Prinsip menjawab TKAD">
+           <div className="tips-score-ring"><Lightbulb size={38} /></div>
+           <strong>Bukti lebih penting daripada tebakan</strong>
+-          <p>Jawaban terbaik adalah yang paling sesuai dengan stimulus, data, dan konsep ilmiah.</p>
++          <p>{tips.length} panduan aktif telah dipublikasikan oleh guru.</p>
+         </div>
+       </section>
+ 
+-      <section className="stack">
+-        <div className="tips-section-heading">
+-          <div>
+-            <div className="eyebrow">Strategi inti</div>
+-            <h2>5 langkah untuk hampir semua soal TKAD</h2>
+-          </div>
+-          <span className="badge"><Gauge size={16} /> Gunakan berulang</span>
+-        </div>
+-        <div className="tips-steps-grid">
+-          {quickSteps.map((step) => {
+-            const Icon = step.icon;
+-            return (
+-              <article className="tips-step-card" key={step.no}>
+-                <div className="tips-step-top">
+-                  <span className="tips-step-number">{step.no}</span>
+-                  <span className="tips-icon-badge"><Icon size={20} /></span>
+-                </div>
+-                <h3>{step.title}</h3>
+-                <p>{step.text}</p>
+-              </article>
+-            );
+-          })}
+-        </div>
+-      </section>
+-
+-      <section className="card stack tips-example">
+-        <div className="tips-section-heading compact">
+-          <div>
+-            <div className="eyebrow">Contoh cara berpikir</div>
+-            <h2>Jangan langsung menghitung</h2>
+-          </div>
+-          <Calculator size={26} />
+-        </div>
+-        <div className="tips-example-grid">
+-          <div className="tips-example-stimulus">
+-            <span className="tips-mini-label">Contoh stimulus</span>
+-            <p>Sebuah alat memberikan gaya 1.200 N pada permukaan seluas 0,08 m². Berapa tekanan yang dihasilkan?</p>
+-          </div>
+-          <div className="tips-example-flow">
+-            <div><span>1</span><p><strong>Ditanya:</strong> tekanan.</p></div>
+-            <ArrowRight size={18} />
+-            <div><span>2</span><p><strong>Data:</strong> F = 1.200 N, A = 0,08 m².</p></div>
+-            <ArrowRight size={18} />
+-            <div><span>3</span><p><strong>Konsep:</strong> P = F/A.</p></div>
+-            <ArrowRight size={18} />
+-            <div><span>4</span><p><strong>Cek:</strong> satuan akhir N/m² atau pascal.</p></div>
+-          </div>
+-        </div>
+-      </section>
+-
+-      <section className="stack">
+-        <div className="tips-section-heading">
+-          <div>
+-            <div className="eyebrow">Sesuai format soal</div>
+-            <h2>Pilih strategi berdasarkan bentuk stimulus</h2>
+-          </div>
+-        </div>
+-        <div className="tips-format-grid">
+-          {formatTips.map((tip) => {
+-            const Icon = tip.icon;
+-            return (
+-              <article className={`tips-format-card tips-accent-${tip.accent}`} key={tip.title}>
+-                <div className="tips-format-title">
+-                  <span><Icon size={20} /></span>
+-                  <h3>{tip.title}</h3>
+-                </div>
+-                <ul>
+-                  {tip.points.map((point) => <li key={point}>{point}</li>)}
+-                </ul>
+-              </article>
+-            );
+-          })}
+-        </div>
+-      </section>
++      {tips.length === 0 ? (
++        <div className="empty-state">Belum ada Tips TKAD yang dipublikasikan oleh guru.</div>
++      ) : null}
+ 
+-      <section className="tips-two-column">
+-        <article className="card stack">
+-          <div className="tips-section-heading compact">
+-            <div>
+-              <div className="eyebrow">Manajemen waktu</div>
+-              <h2>Gunakan sistem 3 putaran</h2>
+-            </div>
+-            <Clock3 size={26} />
+-          </div>
+-          <div className="tips-round-list">
+-            {timeRounds.map((round, index) => (
+-              <div className="tips-round" key={round.title}>
+-                <span className="tips-round-no">{index + 1}</span>
+-                <div>
+-                  <div className="tips-round-head"><strong>{round.title}</strong><span>{round.badge}</span></div>
+-                  <p>{round.text}</p>
+-                </div>
++      {categories.map((category) => {
++        const categoryTips = tips.filter((tip) => tip.category === category);
++        return (
++          <section className="stack" key={category}>
++            <div className="tips-section-heading">
++              <div>
++                <div className="eyebrow">{category}</div>
++                <h2>Strategi yang perlu dikuasai</h2>
+               </div>
+-            ))}
+-          </div>
+-        </article>
+-
+-        <article className="card stack tips-trap-card">
+-          <div className="tips-section-heading compact">
+-            <div>
+-              <div className="eyebrow">Jebakan umum</div>
+-              <h2>Hindari kesalahan yang sebenarnya bisa dicegah</h2>
++              <span className="badge"><ShieldCheck size={16} /> {categoryTips.length} panduan</span>
+             </div>
+-            <TriangleAlert size={26} />
+-          </div>
+-          <div className="tips-trap-list">
+-            {traps.map((trap) => (
+-              <div key={trap}><span>!</span><p>{trap}</p></div>
+-            ))}
+-          </div>
+-        </article>
+-      </section>
+-
+-      <section className="tips-final-check card">
+-        <div className="tips-final-icon"><CheckCircle2 size={30} /></div>
+-        <div>
+-          <div className="eyebrow">Checklist sebelum kirim</div>
+-          <h2>Berhenti 30 detik dan cek 6 hal ini</h2>
+-          <div className="tips-check-grid">
+-            {[
+-              'Semua soal sudah terjawab.',
+-              'Kata “tidak/kecuali” tidak terlewat.',
+-              'Satuan sudah benar.',
+-              'Opsi kompleks sudah diperiksa satu per satu.',
+-              'Jawaban sesuai data, bukan asumsi.',
+-              'Hasil hitungan masuk akal secara ilmiah.',
+-            ].map((item) => (
+-              <span key={item}><CheckCircle2 size={17} />{item}</span>
+-            ))}
+-          </div>
+-        </div>
+-      </section>
++            <div className="tips-format-grid">
++              {categoryTips.map((tip, index) => (
++                <article className={`tips-format-card tips-accent-${accents[index % accents.length]}`} key={tip.id}>
++                  <div className="tips-format-title">
++                    <span><CheckCircle2 size={20} /></span>
++                    <h3>{tip.title}</h3>
++                  </div>
++                  <div dangerouslySetInnerHTML={{ __html: tip.contentHtml }} />
++                </article>
++              ))}
++            </div>
++          </section>
++        );
++      })}
+     </div>
+   );
+ }
+diff --git a/packages/db/prisma/schema.prisma b/packages/db/prisma/schema.prisma
+index 5f88f98..5c4eb28 100644
+--- a/packages/db/prisma/schema.prisma
++++ b/packages/db/prisma/schema.prisma
+@@ -54,6 +54,7 @@ model User {
+   createdAt      DateTime            @default(now())
+   updatedAt      DateTime            @updatedAt
+   materials      Material[]          @relation("MaterialAuthor")
++  tkadTips       TkadTip[]           @relation("TkadTipAuthor")
+   questions      Question[]          @relation("QuestionAuthor")
+   tryouts        Tryout[]            @relation("TryoutAuthor")
+   attempts       Attempt[]
+@@ -130,6 +131,19 @@ model LearningObjective {
+   material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+ }
+ 
++model TkadTip {
++  id          String        @id @default(cuid())
++  authorId    String
++  category    String
++  title       String
++  contentHtml String
++  orderNo     Int           @default(0)
++  status      PublishStatus @default(DRAFT)
++  createdAt   DateTime      @default(now())
++  updatedAt   DateTime      @updatedAt
++  author      User          @relation("TkadTipAuthor", fields: [authorId], references: [id])
++}
++
+ model Blueprint {
+   id                  String   @id @default(cuid())
+   code                String   @unique
+diff --git a/packages/db/prisma/seed.ts b/packages/db/prisma/seed.ts
+index a0da39d..986b14e 100644
+--- a/packages/db/prisma/seed.ts
++++ b/packages/db/prisma/seed.ts
+@@ -189,6 +189,63 @@ async function main() {
+     ],
+   });
+ 
++  const tkadTipInputs = [
++    {
++      id: "tkad-tip-01",
++      category: "Strategi Inti",
++      title: "Baca yang ditanyakan terlebih dahulu",
++      contentHtml: "<p>Temukan target jawaban sebelum membaca stimulus panjang. Cara ini membantu memisahkan informasi penting dari data pengalih.</p>",
++      orderNo: 1,
++    },
++    {
++      id: "tkad-tip-02",
++      category: "Strategi Inti",
++      title: "Tandai kata kunci dan data relevan",
++      contentHtml: "<p>Cari angka, satuan, istilah ilmiah, hubungan sebab-akibat, dan kalimat pembanding yang berkaitan langsung dengan pertanyaan.</p>",
++      orderNo: 2,
++    },
++    {
++      id: "tkad-tip-03",
++      category: "Analisis Soal",
++      title: "Tentukan konsep sebelum memakai rumus",
++      contentHtml: "<p>Ubah konteks soal menjadi konsep IPA yang tepat. Gunakan rumus hanya setelah hubungan antardata sudah dipahami.</p>",
++      orderNo: 3,
++    },
++    {
++      id: "tkad-tip-04",
++      category: "Manajemen Waktu",
++      title: "Gunakan sistem tiga putaran",
++      contentHtml: "<ol><li>Amankan soal yang mudah.</li><li>Kembali ke soal yang membutuhkan analisis.</li><li>Periksa jawaban, satuan, dan opsi kompleks.</li></ol>",
++      orderNo: 4,
++    },
++    {
++      id: "tkad-tip-05",
++      category: "Pemeriksaan Akhir",
++      title: "Cek kewajaran jawaban",
++      contentHtml: "<p>Pastikan hasil sesuai data, satuan benar, kata negatif tidak terlewat, dan kesimpulan tidak lebih luas daripada bukti pada stimulus.</p>",
++      orderNo: 5,
++    },
++  ];
++
++  for (const tip of tkadTipInputs) {
++    await prisma.tkadTip.upsert({
++      where: { id: tip.id },
++      update: {
++        authorId: users.guru.id,
++        category: tip.category,
++        title: tip.title,
++        contentHtml: tip.contentHtml,
++        orderNo: tip.orderNo,
++        status: PublishStatus.PUBLISHED,
++      },
++      create: {
++        ...tip,
++        authorId: users.guru.id,
++        status: PublishStatus.PUBLISHED,
++      },
++    });
++  }
++
+   const question = await prisma.question.upsert({
+     where: { code: "Q-IPA-001" },
+     update: {

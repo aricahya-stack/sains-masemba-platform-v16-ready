@@ -57,7 +57,9 @@ export default async function BankSoalPage({ searchParams }: { searchParams: Pro
       id: question.id,
       code: question.code,
       topicId: question.topicId,
+      topicLabel: question.topic.title,
       blueprintId: question.blueprintId || '',
+      blueprintLabel: question.blueprint?.code || 'Tanpa kisi-kisi',
       difficulty: question.difficulty || '',
       status: question.status,
       stimulusOrder: String(question.stimulusOrder),
@@ -107,8 +109,8 @@ export default async function BankSoalPage({ searchParams }: { searchParams: Pro
         initialRows={initialRows}
         tableColumns={[
           { key: 'code', label: 'Kode soal' },
-          { key: 'topicId', label: 'Topik' },
-          { key: 'blueprintId', label: 'Kisi-kisi' },
+          { key: 'topicLabel', label: 'Topik' },
+          { key: 'blueprintLabel', label: 'Kisi-kisi' },
           { key: 'questionType', label: 'Jenis' },
           { key: 'scoringMode', label: 'Penilaian' },
           { key: 'difficulty', label: 'Kesulitan' },

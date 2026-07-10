@@ -10,12 +10,17 @@ async function ensureTeacher() {
 async function serialize(materialId: string) {
   const material = await prisma.material.findUniqueOrThrow({
     where: { id: materialId },
-    include: { objectives: { orderBy: { orderNo: 'asc' } }, sections: { orderBy: { orderNo: 'asc' } } },
+    include: {
+      topic: true,
+      objectives: { orderBy: { orderNo: 'asc' } },
+      sections: { orderBy: { orderNo: 'asc' } },
+    },
   });
   return {
     id: material.id,
     title: material.title,
     topicId: material.topicId,
+    topicLabel: material.topic.title,
     level: material.level || '',
     status: material.status,
     summaryHtml: material.summaryHtml || material.summaryText || '',

@@ -1,31 +1,31 @@
 import { prisma, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
-import { BookOpenCheck, ClipboardList, FileText, Library, ListChecks, MonitorCog } from 'lucide-react';
+import { BookOpenCheck, ClipboardList, FileText, Library, Lightbulb, MonitorCog } from 'lucide-react';
 import { PageHero } from '../components/page-hero';
 import { StatGrid } from '../components/stat-grid';
 
 export default async function Page() {
   const user = await requireRole(UserRole.GURU);
-  const [materials, questions, blueprints, tryouts, attempts] = await Promise.all([
+  const [materials, tips, questions, tryouts, attempts] = await Promise.all([
     prisma.material.count({ where: { authorId: user.id } }),
+    prisma.tkadTip.count({ where: { authorId: user.id } }),
     prisma.question.count({ where: { authorId: user.id } }),
-    prisma.blueprint.count(),
     prisma.tryout.count({ where: { authorId: user.id } }),
     prisma.attempt.count({ where: { tryout: { authorId: user.id } } }),
   ]);
 
   const stats = [
     { label: 'Materi saya', value: String(materials), note: 'Materi dapat diedit kapan saja.', badge: 'Konten' },
-    { label: 'Kisi-kisi', value: String(blueprints), note: 'Blueprint per tryout.', badge: 'Kisi' },
+    { label: 'Tips TKAD', value: String(tips), note: 'Strategi belajar untuk siswa.', badge: 'Tips' },
     { label: 'Bank soal', value: String(questions), note: 'Soal terhubung kisi-kisi.', badge: 'Soal' },
     { label: 'Tryout saya', value: String(tryouts), note: 'Sesi bisa dijeda dan dipantau.', badge: 'CBT' },
   ];
 
   const cards = [
-    { title: 'Susun materi', text: 'Buat materi ringkas, tambahkan LaTeX, gambar, dan tujuan pembelajaran.', icon: BookOpenCheck, href: '/materi' },
-    { title: 'Buat kisi-kisi', text: 'Petakan indikator berdasarkan Tryout 1, Tryout 2, atau paket lain.', icon: ListChecks, href: '/kisi-kisi' },
-    { title: 'Kelola bank soal', text: 'Masukkan soal per paket tryout, lengkap dengan opsi dan pembahasan.', icon: Library, href: '/bank-soal' },
+    { title: 'Kelola Belajar', text: 'Buat dan edit topik, materi, tujuan pembelajaran, LaTeX, dan media.', icon: BookOpenCheck, href: '/belajar' },
+    { title: 'Kelola Tips TKAD', text: 'Susun strategi, urutan tips, dan status publikasi untuk siswa.', icon: Lightbulb, href: '/tips-tkad' },
     { title: 'Rakit tryout', text: 'Tentukan durasi, status, aturan, dan daftar kode soal.', icon: ClipboardList, href: '/tryout' },
+    { title: 'Kelola bank soal', text: 'Masukkan soal per paket tryout, lengkap dengan opsi dan pembahasan.', icon: Library, href: '/bank-soal' },
   ];
 
   return (
@@ -33,7 +33,7 @@ export default async function Page() {
       <PageHero
         eyebrow="Guru"
         title={`Selamat datang, ${user.fullName}`}
-        description="Dashboard guru dibuat lebih informatif untuk mengelola materi, kisi-kisi, bank soal, tryout, dan monitoring dalam satu alur."
+        description="Kelola Belajar, Tips TKAD, Tryout, dan Bank Soal dari satu portal, lalu pantau pelaksanaan ujian siswa."
       />
       <StatGrid items={stats} />
       <div className="dashboard-card-grid">
@@ -59,6 +59,7 @@ export default async function Page() {
           </div>
           <div className="kv-list">
             <div><strong>{materials}</strong><span> materi tersimpan</span></div>
+            <div><strong>{tips}</strong><span> tips TKAD tersimpan</span></div>
             <div><strong>{questions}</strong><span> soal siap dikelola</span></div>
             <div><strong>{tryouts}</strong><span> paket tryout</span></div>
             <div><strong>{attempts}</strong><span> attempt siswa</span></div>
@@ -72,7 +73,7 @@ export default async function Page() {
             </div>
             <MonitorCog size={24} />
           </div>
-          <div className="notice">Urutan paling aman: buat kisi-kisi, susun bank soal, rakit tryout, lalu pantau hasil siswa.</div>
+          <div className="notice">Urutan kerja: susun topik dan materi, publikasikan Tips TKAD, siapkan bank soal, rakit tryout, lalu pantau hasil siswa.</div>
         </section>
       </div>
     </div>

@@ -33,6 +33,7 @@ export default async function TryoutPage() {
     startAt: item.startAt ? item.startAt.toISOString().slice(0, 16) : '',
     endAt: item.endAt ? item.endAt.toISOString().slice(0, 16) : '',
     questionCodes: item.questions.map((row) => row.question.code).join('\n'),
+    questionCount: String(item.questions.length),
     rulesHtml: item.rulesHtml || '',
   }));
 
@@ -46,6 +47,13 @@ export default async function TryoutPage() {
         endpoint="/api/tryouts"
         fields={fields}
         initialRows={initialRows}
+        tableColumns={[
+          { key: 'title', label: 'Judul tryout' },
+          { key: 'durationMinutes', label: 'Durasi' },
+          { key: 'questionCount', label: 'Jumlah soal' },
+          { key: 'status', label: 'Status' },
+          { key: 'startAt', label: 'Mulai' },
+        ]}
       />
       <section className="card stack">
         <strong>Bank soal tersedia</strong>

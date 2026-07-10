@@ -39,6 +39,7 @@ import {
   ShieldCheck,
   BookMarked,
   BarChart3,
+  Lightbulb,
 } from 'lucide-react';
 
 export type NavItem = { label: string; href: string; section?: string; icon?: string };
@@ -69,6 +70,7 @@ const iconMap = {
   MessageCircleMore,
   UsersRound,
   BellRing,
+  Lightbulb,
 };
 
 const loginHighlightIcons = [ShieldCheck, BookMarked, BarChart3] as const;

@@ -189,6 +189,63 @@ async function main() {
     ],
   });
 
+  const tkadTipInputs = [
+    {
+      id: "tkad-tip-01",
+      category: "Strategi Inti",
+      title: "Baca yang ditanyakan terlebih dahulu",
+      contentHtml: "<p>Temukan target jawaban sebelum membaca stimulus panjang. Cara ini membantu memisahkan informasi penting dari data pengalih.</p>",
+      orderNo: 1,
+    },
+    {
+      id: "tkad-tip-02",
+      category: "Strategi Inti",
+      title: "Tandai kata kunci dan data relevan",
+      contentHtml: "<p>Cari angka, satuan, istilah ilmiah, hubungan sebab-akibat, dan kalimat pembanding yang berkaitan langsung dengan pertanyaan.</p>",
+      orderNo: 2,
+    },
+    {
+      id: "tkad-tip-03",
+      category: "Analisis Soal",
+      title: "Tentukan konsep sebelum memakai rumus",
+      contentHtml: "<p>Ubah konteks soal menjadi konsep IPA yang tepat. Gunakan rumus hanya setelah hubungan antardata sudah dipahami.</p>",
+      orderNo: 3,
+    },
+    {
+      id: "tkad-tip-04",
+      category: "Manajemen Waktu",
+      title: "Gunakan sistem tiga putaran",
+      contentHtml: "<ol><li>Amankan soal yang mudah.</li><li>Kembali ke soal yang membutuhkan analisis.</li><li>Periksa jawaban, satuan, dan opsi kompleks.</li></ol>",
+      orderNo: 4,
+    },
+    {
+      id: "tkad-tip-05",
+      category: "Pemeriksaan Akhir",
+      title: "Cek kewajaran jawaban",
+      contentHtml: "<p>Pastikan hasil sesuai data, satuan benar, kata negatif tidak terlewat, dan kesimpulan tidak lebih luas daripada bukti pada stimulus.</p>",
+      orderNo: 5,
+    },
+  ];
+
+  for (const tip of tkadTipInputs) {
+    await prisma.tkadTip.upsert({
+      where: { id: tip.id },
+      update: {
+        authorId: users.guru.id,
+        category: tip.category,
+        title: tip.title,
+        contentHtml: tip.contentHtml,
+        orderNo: tip.orderNo,
+        status: PublishStatus.PUBLISHED,
+      },
+      create: {
+        ...tip,
+        authorId: users.guru.id,
+        status: PublishStatus.PUBLISHED,
+      },
+    });
+  }
+
   const question = await prisma.question.upsert({
     where: { code: "Q-IPA-001" },
     update: {

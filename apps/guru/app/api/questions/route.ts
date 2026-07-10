@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma, QuestionType, ScoringMode, UserRole } from '@sh/db';
+import { prisma, PublishStatus, QuestionType, ScoringMode, UserRole } from '@sh/db';
 import { getCurrentUser, toFloat, toInt } from '@sh/core';
 
 async function ensureTeacher() {
@@ -17,6 +17,14 @@ function normalizeQuestionType(value: unknown): QuestionType {
 
 function normalizeScoringMode(value: unknown): ScoringMode {
   return value === ScoringMode.PARTIAL_NO_PENALTY ? value : ScoringMode.EXACT_MATCH;
+}
+
+function normalizePublishStatus(value: unknown): PublishStatus {
+  return value === PublishStatus.REVIEW ||
+    value === PublishStatus.PUBLISHED ||
+    value === PublishStatus.ARCHIVED
+    ? value
+    : PublishStatus.DRAFT;
 }
 
 function splitKey(value: unknown) {
@@ -68,14 +76,20 @@ function getCorrectAnswers(questionType: QuestionType, options: Array<{ label: s
 async function serialize(questionId: string) {
   const question = await prisma.question.findUniqueOrThrow({
     where: { id: questionId },
-    include: { options: { orderBy: { label: 'asc' } } },
+    include: {
+      topic: true,
+      blueprint: true,
+      options: { orderBy: { label: 'asc' } },
+    },
   });
   const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
   return {
     id: question.id,
     code: question.code,
     topicId: question.topicId,
+    topicLabel: question.topic.title,
     blueprintId: question.blueprintId || '',
+    blueprintLabel: question.blueprint?.code || 'Tanpa kisi-kisi',
     difficulty: question.difficulty || '',
     status: question.status,
     stimulusOrder: String(question.stimulusOrder),
@@ -147,7 +161,7 @@ function buildQuestionData(body: Record<string, unknown>) {
     questionHtml: String(body.questionHtml),
     explanation: body.explanation ? String(body.explanation) : null,
     difficulty: body.difficulty ? String(body.difficulty) : null,
-    status: body.status || 'DRAFT',
+    status: normalizePublishStatus(body.status),
   };
 }
 

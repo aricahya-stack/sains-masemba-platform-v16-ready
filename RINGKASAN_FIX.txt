@@ -1,0 +1,16 @@
+FIX BUILD VERCEL
+================
+
+File utama:
+apps/guru/app/api/questions/route.ts
+
+Perubahan:
+1. Menambahkan import PublishStatus dari @sh/db.
+2. Menambahkan normalizePublishStatus(value).
+3. Mengubah status: body.status || 'DRAFT'
+   menjadi status: normalizePublishStatus(body.status).
+
+Hasil:
+Properti status kini memiliki tipe enum PublishStatus. Objek data kembali
+cocok dengan Prisma QuestionUncheckedCreateInput sehingga topicId dan authorId
+diterima secara benar oleh TypeScript.

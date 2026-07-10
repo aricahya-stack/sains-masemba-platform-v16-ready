@@ -1,0 +1,34 @@
+PATCH KONTEN GURU V17.1 - FIX BUILD VERCEL
+==========================================
+
+Masalah yang diperbaiki:
+TypeScript/Prisma menolak pembuatan Question karena status dari request
+masih bertipe unknown. Dampaknya Prisma gagal memilih unchecked create input
+dan menampilkan error topicId: string is not assignable to never.
+
+CARA TERCEPAT (FILE LENGKAP)
+1. Ekstrak ZIP ini.
+2. Buka folder patch-konten-guru-v17.1-fix-vercel-file-lengkap.
+3. Salin folder apps dan packages ke folder utama proyek.
+4. Pilih Replace/Timpa semua file yang sama.
+5. Commit lalu push ke GitHub agar Vercel melakukan deployment ulang.
+
+CARA DENGAN GIT PATCH
+Letakkan konten-guru-v17.1-fix-vercel.patch di folder utama proyek V16,
+lalu jalankan:
+
+  git apply --check konten-guru-v17.1-fix-vercel.patch
+  git apply konten-guru-v17.1-fix-vercel.patch
+
+Setelah pemasangan:
+
+  npm install
+  npm run db:generate
+  npm run db:push
+  npm run build --workspace=@sh/guru
+
+Catatan:
+- Tidak perlu mengubah schema database khusus untuk fix error TypeScript ini.
+- Jika schema TkadTip dari V17 belum pernah diterapkan, db:push tetap wajib.
+- File utama yang memperbaiki error Vercel adalah:
+  apps/guru/app/api/questions/route.ts

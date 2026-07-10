@@ -21,6 +21,7 @@ async function serialize(tryoutId: string) {
     startAt: item.startAt ? item.startAt.toISOString().slice(0, 16) : '',
     endAt: item.endAt ? item.endAt.toISOString().slice(0, 16) : '',
     questionCodes: item.questions.map((row) => row.question.code).join('\n'),
+    questionCount: String(item.questions.length),
     rulesHtml: item.rulesHtml || '',
   };
 }

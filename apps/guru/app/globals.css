@@ -1129,3 +1129,63 @@ body { font-family: var(--app-font, Inter, ui-sans-serif, system-ui, -apple-syst
   .tf-row { grid-template-columns: 1fr; }
   .tf-actions { justify-content: flex-start; }
 }
+
+/* Reusable data-table search and pagination controls */
+.manager-table-heading,
+.manager-table-tools,
+.manager-pagination,
+.manager-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.manager-table-heading,
+.manager-pagination { justify-content: space-between; }
+.manager-table-tools { align-items: stretch; }
+.manager-search {
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.manager-search input {
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+}
+.manager-page-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: .9rem;
+  white-space: nowrap;
+}
+.manager-page-size .select { min-width: 92px; }
+.manager-pagination { color: var(--muted); font-size: .9rem; }
+.manager-pagination-actions strong,
+.manager-pagination > strong { color: var(--text); white-space: nowrap; }
+.manager-pagination-actions .button-secondary {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+@media (max-width: 700px) {
+  .manager-table-heading,
+  .manager-table-tools,
+  .manager-pagination { align-items: stretch; flex-direction: column; }
+  .manager-page-size { justify-content: space-between; }
+  .manager-pagination-actions { justify-content: space-between; }
+}
