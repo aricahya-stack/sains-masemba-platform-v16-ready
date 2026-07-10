@@ -1,0 +1,27 @@
+FIX RUNTIME DATABASE V17.2
+==========================
+
+Penyebab yang ditangani:
+Halaman Guru memakai model TkadTip, tetapi build Vercel sebelumnya hanya menjalankan
+`prisma generate`. Generate hanya membuat Prisma Client dan tidak membuat tabel baru.
+
+CARA PASANG
+1. Ekstrak ZIP di folder utama repository.
+2. Salin package.json dan folder packages ke repository.
+3. Pilih Replace/Timpa bila diminta.
+4. Commit dan push:
+
+   git add .
+   git commit -m "Fix runtime TkadTip database sync"
+   git push
+
+Pada deployment berikutnya, build Guru dan Siswa akan menjalankan:
+
+   npm run db:generate
+   npm run db:push
+   npm run build ...
+
+CATATAN
+- DATABASE_URL dan DIRECT_URL harus tersedia pada Vercel Environment Variables.
+- db:push tidak menghapus data untuk perubahan ini; perubahan hanya menambah tabel TkadTip.
+- SQL_MANUAL_TKADTIP.sql tersedia bila ingin membuat tabel langsung melalui SQL Editor database.

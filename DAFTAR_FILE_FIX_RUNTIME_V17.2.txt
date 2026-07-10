@@ -1,0 +1,7 @@
+File baru/perubahan khusus V17.2:
+- package.json
+- packages/db/prisma/migrations/20260710093000_add_tkad_tip/migration.sql
+- SQL_MANUAL_TKADTIP.sql
+- CARA_PASANG_V17.2.txt
+
+Paket ini juga memuat seluruh file Konten Guru V17.1.
