@@ -190,8 +190,8 @@ export async function PUT(request: Request) {
   const questionId = String(body.id || '');
   if (!questionId) return NextResponse.json({ error: 'ID soal wajib ada.' }, { status: 400 });
 
-  const owned = await prisma.question.findUnique({ where: { id: questionId } });
-  if (!owned || owned.blueprintId) {
+  const owned = await prisma.question.findUnique({ where: { id: questionId }, include: { tryoutQuestions: { select: { id: true }, take: 1 } } });
+  if (!owned || owned.tryoutQuestions.length > 0) {
     return NextResponse.json({ error: 'Soal latihan tidak ditemukan.' }, { status: 404 });
   }
 
@@ -215,8 +215,8 @@ export async function DELETE(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const body = (await request.json()) as Record<string, unknown>;
   const questionId = String(body.id || '');
-  const owned = await prisma.question.findUnique({ where: { id: questionId } });
-  if (!owned || owned.blueprintId) {
+  const owned = await prisma.question.findUnique({ where: { id: questionId }, include: { tryoutQuestions: { select: { id: true }, take: 1 } } });
+  if (!owned || owned.tryoutQuestions.length > 0) {
     return NextResponse.json({ error: 'Soal latihan tidak ditemukan.' }, { status: 404 });
   }
 

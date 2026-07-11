@@ -98,23 +98,29 @@ function correctAnswers(questionType: QuestionType, options: Array<{ label: stri
 async function serialize(questionId: string) {
   const question = await prisma.question.findUniqueOrThrow({
     where: { id: questionId },
-    include: { topic: true, blueprint: true, options: { orderBy: { label: 'asc' } } },
+    include: {
+      topic: true,
+      blueprint: true,
+      options: { orderBy: { label: 'asc' } },
+      tryoutQuestions: { include: { tryout: true }, orderBy: { orderNo: 'asc' } },
+    },
   });
-  if (!question.blueprint) throw new Error('Soal tryout tidak memiliki kisi-kisi.');
+  const mappedTryout = question.tryoutQuestions[0]?.tryout;
+  const blueprint = question.blueprint;
   const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
   return {
     id: question.id,
     _persisted: 'true',
-    testGroup: question.blueprint.testGroup || '',
-    blueprintId: question.blueprint.id,
-    blueprintCode: question.blueprint.code,
-    competency: question.blueprint.competency,
-    indicator: question.blueprint.indicator,
-    materialName: question.blueprint.materialName || '',
-    cognitiveLevel: question.blueprint.cognitiveLevel || '',
-    targetDifficulty: question.blueprint.targetDifficulty || '',
-    targetQuestionCount: String(question.blueprint.targetQuestionCount || 1),
-    blueprintText: question.blueprint.blueprintText || '',
+    testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
+    blueprintId: blueprint?.id || '',
+    blueprintCode: blueprint?.code || `LEGACY-${question.code}`,
+    competency: blueprint?.competency || 'Kompetensi belum dicatat pada data lama',
+    indicator: blueprint?.indicator || 'Indikator belum dicatat pada data lama',
+    materialName: blueprint?.materialName || question.topic.title,
+    cognitiveLevel: blueprint?.cognitiveLevel || '',
+    targetDifficulty: blueprint?.targetDifficulty || question.difficulty || '',
+    targetQuestionCount: String(blueprint?.targetQuestionCount || 1),
+    blueprintText: blueprint?.blueprintText || (mappedTryout ? `Terhubung ke ${mappedTryout.title}` : ''),
     code: question.code,
     topicId: question.topicId,
     topicLabel: question.topic.title,
@@ -136,8 +142,11 @@ async function serialize(questionId: string) {
 }
 
 function blueprintData(body: Record<string, unknown>) {
+  const testGroup = String(body.testGroup || '').trim();
   return {
-    testGroup: String(body.testGroup || '').trim() || null,
+    periodCode: 'TRYOUT_CONTENT',
+    periodName: testGroup || null,
+    testGroup: testGroup || null,
     topicId: body.topicId ? String(body.topicId) : null,
     competency: String(body.competency || '').trim(),
     indicator: String(body.indicator || '').trim(),
@@ -208,8 +217,11 @@ export async function PUT(request: Request) {
   const body = (await request.json()) as Record<string, unknown>;
   const questionId = String(body.id || '');
   if (!questionId) return NextResponse.json({ error: 'ID soal wajib ada.' }, { status: 400 });
-  const owned = await prisma.question.findUnique({ where: { id: questionId } });
-  if (!owned || owned.authorId !== user.id || !owned.blueprintId) {
+  const owned = await prisma.question.findUnique({
+    where: { id: questionId },
+    include: { tryoutQuestions: { include: { tryout: { select: { authorId: true } } } } },
+  });
+  if (!owned) {
     return NextResponse.json({ error: 'Soal tryout tidak ditemukan.' }, { status: 404 });
   }
 
@@ -218,10 +230,16 @@ export async function PUT(request: Request) {
     const options = buildOptions(body);
     const blueprintCode = String(body.blueprintCode).trim();
     await prisma.$transaction(async (tx) => {
-      const blueprint = await tx.blueprint.update({
-        where: { id: owned.blueprintId! },
-        data: { code: blueprintCode, ...blueprintData(body) },
-      });
+      const blueprint = owned.blueprintId
+        ? await tx.blueprint.update({
+            where: { id: owned.blueprintId },
+            data: { code: blueprintCode, ...blueprintData(body) },
+          })
+        : await tx.blueprint.upsert({
+            where: { code: blueprintCode },
+            update: blueprintData(body),
+            create: { code: blueprintCode, ...blueprintData(body) },
+          });
       await tx.question.update({ where: { id: questionId }, data: questionData(body, blueprint.id) });
       await tx.questionOption.deleteMany({ where: { questionId } });
       await tx.questionOption.createMany({ data: options.map((option) => ({ questionId, ...option })) });
@@ -237,17 +255,22 @@ export async function DELETE(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const body = (await request.json()) as Record<string, unknown>;
   const questionId = String(body.id || '');
-  const owned = await prisma.question.findUnique({ where: { id: questionId } });
-  if (!owned || owned.authorId !== user.id || !owned.blueprintId) {
+  const owned = await prisma.question.findUnique({
+    where: { id: questionId },
+    include: { tryoutQuestions: { include: { tryout: { select: { authorId: true } } } } },
+  });
+  if (!owned) {
     return NextResponse.json({ error: 'Soal tryout tidak ditemukan.' }, { status: 404 });
   }
 
   try {
     await prisma.$transaction(async (tx) => {
-      const blueprintId = owned.blueprintId!;
+      const blueprintId = owned.blueprintId;
       await tx.question.delete({ where: { id: questionId } });
-      const remaining = await tx.question.count({ where: { blueprintId } });
-      if (remaining === 0) await tx.blueprint.delete({ where: { id: blueprintId } });
+      if (blueprintId) {
+        const remaining = await tx.question.count({ where: { blueprintId } });
+        if (remaining === 0) await tx.blueprint.delete({ where: { id: blueprintId } });
+      }
     });
     return NextResponse.json({ ok: true });
   } catch {

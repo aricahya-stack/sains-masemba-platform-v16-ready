@@ -3,12 +3,31 @@ import { requireRole } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
 export default async function TryoutPage() {
-  const user = await requireRole(UserRole.GURU);
+  await requireRole(UserRole.GURU);
   const [topics, questions] = await Promise.all([
     prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
     prisma.question.findMany({
-      where: { authorId: user.id, blueprintId: { not: null } },
-      include: { topic: true, blueprint: true, options: { orderBy: { label: 'asc' } } },
+      where: {
+        OR: [
+          { tryoutQuestions: { some: {} } },
+          {
+            blueprint: {
+              is: {
+                OR: [
+                  { periodCode: 'TRYOUT_CONTENT' },
+                  { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        topic: true,
+        blueprint: true,
+        options: { orderBy: { label: 'asc' } },
+        tryoutQuestions: { include: { tryout: true }, orderBy: { orderNo: 'asc' } },
+      },
       orderBy: [{ stimulusOrder: 'asc' }, { code: 'asc' }],
     }),
   ]);
@@ -56,21 +75,22 @@ export default async function TryoutPage() {
   ];
 
   const initialRows = sortedQuestions.map((question) => {
-    const blueprint = question.blueprint!;
+    const blueprint = question.blueprint;
+    const mappedTryout = question.tryoutQuestions[0]?.tryout;
     const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
     return {
       id: question.id,
       _persisted: 'true',
-      testGroup: blueprint.testGroup || '',
-      blueprintId: blueprint.id,
-      blueprintCode: blueprint.code,
-      competency: blueprint.competency,
-      indicator: blueprint.indicator,
-      materialName: blueprint.materialName || '',
-      cognitiveLevel: blueprint.cognitiveLevel || '',
-      targetDifficulty: blueprint.targetDifficulty || '',
-      targetQuestionCount: String(blueprint.targetQuestionCount || 1),
-      blueprintText: blueprint.blueprintText || '',
+      testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
+      blueprintId: blueprint?.id || '',
+      blueprintCode: blueprint?.code || `LEGACY-${question.code}`,
+      competency: blueprint?.competency || 'Kompetensi belum dicatat pada data lama',
+      indicator: blueprint?.indicator || 'Indikator belum dicatat pada data lama',
+      materialName: blueprint?.materialName || question.topic.title,
+      cognitiveLevel: blueprint?.cognitiveLevel || '',
+      targetDifficulty: blueprint?.targetDifficulty || question.difficulty || '',
+      targetQuestionCount: String(blueprint?.targetQuestionCount || 1),
+      blueprintText: blueprint?.blueprintText || (mappedTryout ? `Terhubung ke ${mappedTryout.title}` : ''),
       code: question.code,
       topicId: question.topicId,
       topicLabel: question.topic.title,
@@ -97,7 +117,7 @@ export default async function TryoutPage() {
     <InlineEditableManager
       eyebrow="Ujian • Tryout"
       title="Data tryout: kisi-kisi dan soal"
-      description="Setiap baris memuat kisi-kisi sekaligus soal tryout. Paket impor dirancang berisi tepat 30 soal per nama tryout. Seluruh konten dapat diedit langsung di tabel dengan WYSIWYG."
+      description="Setiap baris memuat kisi-kisi sekaligus soal tryout. Data lama dimuat berdasarkan relasi paket Tryout, sedangkan data impor baru tetap dikelompokkan melalui kisi-kisi. Paket baru dirancang berisi tepat 30 soal. Seluruh konten dapat diedit langsung di tabel dengan WYSIWYG."
       entityName="data tryout"
       endpoint="/api/tryout-content"
       fields={fields}

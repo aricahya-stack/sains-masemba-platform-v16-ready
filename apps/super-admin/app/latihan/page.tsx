@@ -12,7 +12,19 @@ export default async function LatihanAdminPage() {
     }),
     prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
     prisma.question.findMany({
-      where: { blueprintId: null },
+      where: {
+        tryoutQuestions: { none: {} },
+        NOT: {
+          blueprint: {
+            is: {
+              OR: [
+                { periodCode: 'TRYOUT_CONTENT' },
+                { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+      },
       include: { author: true, topic: true, options: { orderBy: { label: 'asc' } } },
       orderBy: [{ author: { fullName: 'asc' } }, { code: 'asc' }],
     }),
@@ -80,7 +92,7 @@ export default async function LatihanAdminPage() {
     <InlineEditableManager
       eyebrow="Akademik • Latihan"
       title="Kelola seluruh soal latihan"
-      description="Latihan adalah soal yang tampil di dalam materi belajar. Data ini dipisahkan dari soal Tryout dan dapat diedit lintas guru langsung dari tabel."
+      description="Latihan adalah soal yang tampil di dalam materi belajar. Data ini dipisahkan berdasarkan relasi paket Tryout, sehingga soal latihan lama tetap dimuat walaupun sebelumnya memiliki kisi-kisi."
       entityName="soal latihan"
       endpoint="/api/questions"
       fields={fields}

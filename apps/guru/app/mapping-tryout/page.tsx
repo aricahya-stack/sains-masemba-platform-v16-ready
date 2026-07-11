@@ -8,7 +8,14 @@ export default async function MappingTryoutPage() {
     prisma.question.findMany({
       where: {
         authorId: user.id,
-        blueprint: { is: { testGroup: { not: null } } },
+        blueprint: {
+          is: {
+            OR: [
+              { periodCode: 'TRYOUT_CONTENT' },
+              { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+            ],
+          },
+        },
       },
       include: { blueprint: true },
       orderBy: [{ stimulusOrder: 'asc' }, { code: 'asc' }],
@@ -21,11 +28,14 @@ export default async function MappingTryoutPage() {
   ]);
 
   const groups = new Map<string, string[]>();
+  for (const tryout of tryouts) {
+    groups.set(tryout.title, tryout.questions.map((row) => row.question.code));
+  }
   for (const question of questions) {
     const groupName = question.blueprint?.testGroup?.trim();
     if (!groupName) continue;
     const current = groups.get(groupName) || [];
-    current.push(question.code);
+    if (!current.includes(question.code)) current.push(question.code);
     groups.set(groupName, current);
   }
 
@@ -69,7 +79,7 @@ export default async function MappingTryoutPage() {
     <InlineEditableManager
       eyebrow="Ujian • Mapping Tryout"
       title="Mapping dan penjadwalan tryout"
-      description="Paket tryout hasil impor dipetakan dan dijadwalkan di halaman ini, bukan melalui Excel. Hanya paket dengan tepat 30 soal yang dapat disimpan sebagai jadwal tryout."
+      description="Paket tryout hasil impor maupun Tryout lama dipetakan dan dijadwalkan di halaman ini, bukan melalui Excel. Hanya paket dengan tepat 30 soal yang dapat disimpan sebagai jadwal tryout."
       entityName="jadwal tryout"
       endpoint="/api/tryouts"
       fields={fields}

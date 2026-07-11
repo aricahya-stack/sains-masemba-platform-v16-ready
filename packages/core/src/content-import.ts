@@ -416,6 +416,8 @@ async function importTryoutContent(rows: ImportRow[], actor: ImportActor): Promi
 
       const existingBlueprint = await tx.blueprint.findUnique({ where: { code: blueprintCode } });
       const blueprintData = {
+        periodCode: 'TRYOUT_CONTENT',
+        periodName: groupName,
         testGroup: groupName,
         topicId,
         competency,

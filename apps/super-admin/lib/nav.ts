@@ -13,6 +13,7 @@ export const navItems: NavItem[] = [
   { label: 'Tryout', href: '/tryout', section: 'Ujian', icon: 'ClipboardList' },
   { label: 'Mapping Tryout', href: '/mapping-tryout', section: 'Ujian', icon: 'PencilRuler' },
   { label: 'Monitoring Tryout', href: '/monitoring', section: 'Ujian', icon: 'MonitorCog' },
+  { label: 'Statistik Tryout', href: '/statistik-tryout', section: 'Ujian', icon: 'ChartColumnBig' },
   { label: 'Import Excel', href: '/imports', section: 'Operasional', icon: 'FileSpreadsheet' },
   { label: 'Settings', href: '/settings', section: 'Operasional', icon: 'Settings2' },
   { label: 'Pengembang', href: '/pengembang', section: 'Info', icon: 'Code2' },

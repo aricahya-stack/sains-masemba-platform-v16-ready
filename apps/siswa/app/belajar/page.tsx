@@ -73,7 +73,20 @@ export default async function BelajarPage({ searchParams }: { searchParams: Prom
         orderBy: { updatedAt: 'desc' },
       },
       questions: {
-        where: { status: 'PUBLISHED' },
+        where: {
+          status: 'PUBLISHED',
+          tryoutQuestions: { none: {} },
+          NOT: {
+            blueprint: {
+              is: {
+                OR: [
+                  { periodCode: 'TRYOUT_CONTENT' },
+                  { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        },
         include: { options: { orderBy: { label: 'asc' } } },
         orderBy: { code: 'asc' },
         take: 15,

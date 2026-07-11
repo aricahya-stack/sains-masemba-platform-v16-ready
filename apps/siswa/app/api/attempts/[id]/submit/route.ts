@@ -24,7 +24,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json({ error: 'Attempt tidak valid.' }, { status: 404 });
   }
 
-  const answerMap = new Map(attempt.answers.map((answer) => [answer.questionId, answer]));
+  type AttemptAnswerRow = (typeof attempt.answers)[number];
+  const answerMap = new Map<string, AttemptAnswerRow>(
+    attempt.answers.map((answer): [string, AttemptAnswerRow] => [answer.questionId, answer]),
+  );
   let earned = 0;
   let possible = 0;
   const answerUpdates: Array<Promise<unknown>> = [];

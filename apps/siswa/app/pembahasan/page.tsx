@@ -81,7 +81,20 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
       include: {
         materials: { where: { status: 'PUBLISHED' } },
         questions: {
-          where: { status: 'PUBLISHED' },
+          where: {
+          status: 'PUBLISHED',
+          tryoutQuestions: { none: {} },
+          NOT: {
+            blueprint: {
+              is: {
+                OR: [
+                  { periodCode: 'TRYOUT_CONTENT' },
+                  { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        },
           include: { options: { orderBy: { label: 'asc' } } },
           orderBy: { code: 'asc' },
           take: 15,

@@ -61,7 +61,13 @@ async function resolveQuestions(authorId: string, questionCodesText: string, req
   if (!codes.length) return [] as Array<{ id: string; code: string }>;
 
   const questions = await prisma.question.findMany({
-    where: { code: { in: codes }, authorId, blueprintId: { not: null } },
+    where: {
+      code: { in: codes },
+      OR: [
+        { authorId },
+        { tryoutQuestions: { some: { tryout: { authorId } } } },
+      ],
+    },
     select: { id: true, code: true },
   }) as Array<{ id: string; code: string }>;
   const byCode = new Map(questions.map((question) => [question.code, question]));

@@ -12,13 +12,41 @@ export default async function ApprovalPage() {
       take: 10,
     }),
     prisma.question.findMany({
-      where: { blueprintId: null, status: { in: [PublishStatus.DRAFT, PublishStatus.REVIEW] } },
+      where: {
+        tryoutQuestions: { none: {} },
+        NOT: {
+          blueprint: {
+            is: {
+              OR: [
+                { periodCode: 'TRYOUT_CONTENT' },
+                { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+        status: { in: [PublishStatus.DRAFT, PublishStatus.REVIEW] },
+      },
       include: { author: true, topic: true },
       orderBy: { code: 'asc' },
       take: 10,
     }),
     prisma.question.findMany({
-      where: { blueprintId: { not: null }, status: { in: [PublishStatus.DRAFT, PublishStatus.REVIEW] } },
+      where: {
+        OR: [
+          { tryoutQuestions: { some: {} } },
+          {
+            blueprint: {
+              is: {
+                OR: [
+                  { periodCode: 'TRYOUT_CONTENT' },
+                  { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        ],
+        status: { in: [PublishStatus.DRAFT, PublishStatus.REVIEW] },
+      },
       include: { author: true, topic: true, blueprint: true },
       orderBy: { code: 'asc' },
       take: 10,

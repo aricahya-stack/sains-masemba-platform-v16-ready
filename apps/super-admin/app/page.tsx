@@ -14,8 +14,34 @@ export default async function Page() {
     prisma.user.count({ where: { role: UserRole.SISWA } }),
     prisma.user.count({ where: { role: UserRole.ORANG_TUA } }),
     prisma.material.count(),
-    prisma.question.count({ where: { blueprintId: null } }),
-    prisma.question.count({ where: { blueprintId: { not: null } } }),
+    prisma.question.count({ where: {
+        tryoutQuestions: { none: {} },
+        NOT: {
+          blueprint: {
+            is: {
+              OR: [
+                { periodCode: 'TRYOUT_CONTENT' },
+                { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+      } }),
+    prisma.question.count({ where: {
+        OR: [
+          { tryoutQuestions: { some: {} } },
+          {
+            blueprint: {
+              is: {
+                OR: [
+                  { periodCode: 'TRYOUT_CONTENT' },
+                  { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        ],
+      } }),
     prisma.tryout.count(),
     prisma.question.findMany({ where: { blueprint: { is: { testGroup: { not: null } } } }, select: { authorId: true, blueprint: { select: { testGroup: true } } } }),
     prisma.tryoutIncident.findMany({ orderBy: { createdAt: 'desc' }, take: 5, include: { tryout: true } }),

@@ -1129,3 +1129,56 @@ body { font-family: var(--app-font, Inter, ui-sans-serif, system-ui, -apple-syst
   .tf-row { grid-template-columns: 1fr; }
   .tf-actions { justify-content: flex-start; }
 }
+
+/* Tryout descriptive statistics */
+.stats-filter-card { border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--border)); }
+.stats-filter-form { display: grid; grid-template-columns: minmax(240px, 1fr) auto; gap: 14px; align-items: end; }
+.stats-filter-form .field { margin: 0; }
+.histogram-card { overflow: hidden; }
+.histogram-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.marker-legend { display: inline-flex; align-items: center; gap: 8px; padding: 8px 11px; border-radius: 999px; background: color-mix(in srgb, #ef4444 12%, var(--surface)); border: 1px solid color-mix(in srgb, #ef4444 35%, var(--border)); font-size: .86rem; font-weight: 700; white-space: nowrap; }
+.marker-legend i { width: 3px; height: 18px; display: inline-block; border-radius: 999px; background: #ef4444; box-shadow: 0 0 0 3px color-mix(in srgb, #ef4444 15%, transparent); }
+.histogram-shell { display: grid; grid-template-columns: 22px 1fr; grid-template-rows: minmax(300px, 42vh) auto; gap: 8px 12px; min-width: 0; }
+.histogram-y-label { writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; justify-self: center; font-size: .78rem; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
+.histogram-x-label { grid-column: 2; text-align: center; font-size: .78rem; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
+.histogram-plot { position: relative; display: grid; grid-template-columns: repeat(10, minmax(36px, 1fr)); gap: 10px; align-items: end; padding: 28px 14px 42px; min-width: 720px; border-radius: 18px; border: 1px solid var(--border); background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 92%, #dbeafe), color-mix(in srgb, var(--surface) 98%, #f8fafc)); overflow: visible; }
+.histogram-shell { overflow-x: auto; padding-bottom: 4px; }
+.histogram-column { position: relative; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; z-index: 2; }
+.histogram-value { min-height: 24px; text-align: center; font-size: .76rem; font-weight: 800; color: var(--text); }
+.histogram-bar { min-height: 0; border-radius: 12px 12px 4px 4px; box-shadow: 0 10px 24px rgba(15, 23, 42, .12); transition: transform .2s ease, filter .2s ease; }
+.histogram-bar:hover { transform: translateY(-3px); filter: saturate(1.15); }
+.histogram-bar-1 { background: linear-gradient(180deg, #fb7185, #e11d48); }
+.histogram-bar-2 { background: linear-gradient(180deg, #f97316, #ea580c); }
+.histogram-bar-3 { background: linear-gradient(180deg, #fbbf24, #d97706); }
+.histogram-bar-4 { background: linear-gradient(180deg, #a3e635, #65a30d); }
+.histogram-bar-5 { background: linear-gradient(180deg, #34d399, #059669); }
+.histogram-bar-6 { background: linear-gradient(180deg, #2dd4bf, #0f766e); }
+.histogram-bar-7 { background: linear-gradient(180deg, #22d3ee, #0891b2); }
+.histogram-bar-8 { background: linear-gradient(180deg, #60a5fa, #2563eb); }
+.histogram-bar-9 { background: linear-gradient(180deg, #818cf8, #4f46e5); }
+.histogram-bar-10 { background: linear-gradient(180deg, #c084fc, #9333ea); }
+.histogram-label { position: absolute; left: 50%; bottom: -31px; transform: translateX(-50%) rotate(-35deg); transform-origin: center; width: 78px; text-align: center; white-space: nowrap; font-size: .67rem; font-weight: 700; color: var(--muted); }
+.histogram-gridline { position: absolute; left: 14px; right: 14px; border-top: 1px dashed color-mix(in srgb, var(--muted) 22%, transparent); z-index: 1; }
+.gridline-25 { bottom: calc(42px + 25%); }
+.gridline-50 { bottom: calc(42px + 50%); }
+.gridline-75 { bottom: calc(42px + 75%); }
+.gridline-100 { top: 28px; }
+.histogram-marker { position: absolute; top: 18px; bottom: 39px; z-index: 5; width: 3px; border-radius: 999px; background: #ef4444; box-shadow: 0 0 0 2px rgba(255,255,255,.78), 0 0 18px rgba(239,68,68,.65); transform: translateX(-1px); pointer-events: none; }
+.histogram-marker::after { content: ''; position: absolute; left: 50%; bottom: -4px; width: 11px; height: 11px; transform: translate(-50%, 50%) rotate(45deg); background: #ef4444; border-radius: 2px; }
+.histogram-marker span { position: absolute; top: -2px; left: 50%; transform: translate(-50%, -100%); padding: 4px 7px; border-radius: 8px; background: #ef4444; color: white; font-size: .72rem; font-weight: 800; white-space: nowrap; }
+.statistics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.statistic-section-card { min-width: 0; }
+.compact-stat-table { width: 100%; }
+.compact-stat-table th { width: 58%; text-align: left; }
+.compact-stat-table td { text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; }
+.statistics-table td, .statistics-table th { font-variant-numeric: tabular-nums; }
+.interpretation-box { padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--brand) 7%, var(--surface)); border: 1px solid color-mix(in srgb, var(--brand) 18%, var(--border)); }
+.interpretation-box p { margin: 5px 0 0; color: var(--muted); line-height: 1.55; }
+.stats-method-note p { margin: 6px 0 0; line-height: 1.6; }
+.parent-stat-filter { display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 12px; align-items: end; }
+@media (max-width: 860px) {
+  .statistics-grid { grid-template-columns: 1fr; }
+  .stats-filter-form, .parent-stat-filter { grid-template-columns: 1fr; }
+  .histogram-heading { flex-direction: column; }
+  .marker-legend { white-space: normal; }
+}

@@ -3,11 +3,10 @@ import { requireRole } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
 export default async function BelajarPage() {
-  const user = await requireRole(UserRole.GURU);
+  await requireRole(UserRole.GURU);
   const topics = await prisma.topic.findMany({
     include: {
       materials: {
-        where: { authorId: user.id },
         include: {
           objectives: { orderBy: { orderNo: 'asc' } },
           sections: { orderBy: { orderNo: 'asc' } },
@@ -75,7 +74,7 @@ export default async function BelajarPage() {
     <InlineEditableManager
       eyebrow="Belajar"
       title="Topik dan materi"
-      description="Topik dan materi kini dikelola dalam satu tabel. Buka baris untuk mengedit seluruh konten memakai editor WYSIWYG, lalu simpan langsung dari tabel."
+      description="Topik dan materi kini dikelola dalam satu tabel. Seluruh data lama dimuat kembali tanpa bergantung pada akun pembuat sebelumnya. Buka baris untuk mengedit seluruh konten memakai editor WYSIWYG, lalu simpan langsung dari tabel."
       entityName="topik dan materi"
       endpoint="/api/topic-materials"
       fields={fields}

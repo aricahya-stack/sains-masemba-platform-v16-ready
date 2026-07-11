@@ -12,8 +12,28 @@ export default async function TryoutAdminPage() {
     }),
     prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
     prisma.question.findMany({
-      where: { blueprintId: { not: null } },
-      include: { author: true, topic: true, blueprint: true, options: { orderBy: { label: 'asc' } } },
+      where: {
+        OR: [
+          { tryoutQuestions: { some: {} } },
+          {
+            blueprint: {
+              is: {
+                OR: [
+                  { periodCode: 'TRYOUT_CONTENT' },
+                  { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        author: true,
+        topic: true,
+        blueprint: true,
+        options: { orderBy: { label: 'asc' } },
+        tryoutQuestions: { include: { tryout: true }, orderBy: { orderNo: 'asc' } },
+      },
       orderBy: [{ author: { fullName: 'asc' } }, { stimulusOrder: 'asc' }, { code: 'asc' }],
     }),
   ]);
@@ -64,23 +84,24 @@ export default async function TryoutAdminPage() {
   ];
 
   const initialRows = sortedQuestions.map((question) => {
-    const blueprint = question.blueprint!;
+    const blueprint = question.blueprint;
+    const mappedTryout = question.tryoutQuestions[0]?.tryout;
     const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
     return {
       id: question.id,
       _persisted: 'true',
       authorId: question.authorId,
       authorLabel: question.author.fullName,
-      testGroup: blueprint.testGroup || '',
-      blueprintId: blueprint.id,
-      blueprintCode: blueprint.code,
-      competency: blueprint.competency,
-      indicator: blueprint.indicator,
-      materialName: blueprint.materialName || '',
-      cognitiveLevel: blueprint.cognitiveLevel || '',
-      targetDifficulty: blueprint.targetDifficulty || '',
-      targetQuestionCount: String(blueprint.targetQuestionCount || 1),
-      blueprintText: blueprint.blueprintText || '',
+      testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
+      blueprintId: blueprint?.id || '',
+      blueprintCode: blueprint?.code || `LEGACY-${question.code}`,
+      competency: blueprint?.competency || 'Kompetensi belum dicatat pada data lama',
+      indicator: blueprint?.indicator || 'Indikator belum dicatat pada data lama',
+      materialName: blueprint?.materialName || question.topic.title,
+      cognitiveLevel: blueprint?.cognitiveLevel || '',
+      targetDifficulty: blueprint?.targetDifficulty || question.difficulty || '',
+      targetQuestionCount: String(blueprint?.targetQuestionCount || 1),
+      blueprintText: blueprint?.blueprintText || (mappedTryout ? `Terhubung ke ${mappedTryout.title}` : ''),
       code: question.code,
       topicId: question.topicId,
       topicLabel: question.topic.title,
@@ -107,7 +128,7 @@ export default async function TryoutAdminPage() {
     <InlineEditableManager
       eyebrow="Ujian • Tryout"
       title="Kelola kisi-kisi dan soal tryout"
-      description="Setiap baris memuat kisi-kisi sekaligus soal. Super Admin dapat mengelola paket milik seluruh guru dan mengedit semua bagian langsung di tabel dengan WYSIWYG."
+      description="Setiap baris memuat kisi-kisi sekaligus soal. Soal dari paket Tryout lama tetap dimuat meskipun belum memiliki kisi-kisi. Super Admin dapat mengelola paket milik seluruh guru dan mengedit semua bagian langsung di tabel dengan WYSIWYG."
       entityName="data tryout"
       endpoint="/api/tryout-content"
       fields={fields}

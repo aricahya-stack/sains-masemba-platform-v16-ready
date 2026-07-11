@@ -3,11 +3,23 @@ import { requireRole } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
 export default async function LatihanPage() {
-  const user = await requireRole(UserRole.GURU);
+  await requireRole(UserRole.GURU);
   const [topics, questions] = await Promise.all([
     prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
     prisma.question.findMany({
-      where: { authorId: user.id, blueprintId: null },
+      where: {
+        tryoutQuestions: { none: {} },
+        NOT: {
+          blueprint: {
+            is: {
+              OR: [
+                { periodCode: 'TRYOUT_CONTENT' },
+                { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+      },
       include: { topic: true, options: { orderBy: { label: 'asc' } } },
       orderBy: { code: 'asc' },
     }),
@@ -72,7 +84,7 @@ export default async function LatihanPage() {
     <InlineEditableManager
       eyebrow="Konten • Latihan"
       title="Soal latihan dalam materi"
-      description="Latihan adalah soal yang tampil pada topik belajar siswa. Semua soal latihan di tabel ini tidak terhubung ke kisi-kisi tryout."
+      description="Latihan adalah soal yang tampil pada topik belajar siswa. Semua soal yang tidak terhubung ke paket Tryout dimuat sebagai Latihan, termasuk data lama yang sebelumnya memiliki kisi-kisi."
       entityName="soal latihan"
       endpoint="/api/questions"
       fields={fields}

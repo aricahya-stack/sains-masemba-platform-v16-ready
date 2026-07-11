@@ -11,7 +11,14 @@ export default async function MappingTryoutAdminPage() {
       select: { id: true, fullName: true, role: true },
     }),
     prisma.question.findMany({
-      where: { blueprint: { is: { testGroup: { not: null } } } },
+      where: { blueprint: {
+          is: {
+            OR: [
+              { periodCode: 'TRYOUT_CONTENT' },
+              { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+            ],
+          },
+        } },
       include: { author: true, blueprint: true },
       orderBy: [{ author: { fullName: 'asc' } }, { stimulusOrder: 'asc' }, { code: 'asc' }],
     }),
@@ -22,12 +29,21 @@ export default async function MappingTryoutAdminPage() {
   ]);
 
   const groups = new Map<string, { authorId: string; authorLabel: string; groupName: string; codes: string[] }>();
+  for (const tryout of tryouts) {
+    const key = `${tryout.authorId}::${tryout.title}`;
+    groups.set(key, {
+      authorId: tryout.authorId,
+      authorLabel: tryout.author.fullName,
+      groupName: tryout.title,
+      codes: tryout.questions.map((row) => row.question.code),
+    });
+  }
   for (const question of questions) {
     const groupName = question.blueprint?.testGroup?.trim();
     if (!groupName) continue;
     const key = `${question.authorId}::${groupName}`;
     const current = groups.get(key) || { authorId: question.authorId, authorLabel: question.author.fullName, groupName, codes: [] };
-    current.codes.push(question.code);
+    if (!current.codes.includes(question.code)) current.codes.push(question.code);
     groups.set(key, current);
   }
 
@@ -75,7 +91,7 @@ export default async function MappingTryoutAdminPage() {
     <InlineEditableManager
       eyebrow="Ujian • Mapping Tryout"
       title="Mapping dan penjadwalan seluruh tryout"
-      description="Paket hasil impor dijadwalkan dari halaman ini, bukan melalui Excel. Paket dipisahkan berdasarkan pemilik dan hanya dapat dijadwalkan setelah berisi tepat 30 soal."
+      description="Paket hasil impor dan Tryout lama dijadwalkan dari halaman ini, bukan melalui Excel. Paket dipisahkan berdasarkan pemilik dan hanya dapat dijadwalkan setelah berisi tepat 30 soal."
       entityName="jadwal tryout"
       endpoint="/api/tryouts"
       fields={fields}

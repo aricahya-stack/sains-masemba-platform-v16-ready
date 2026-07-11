@@ -206,7 +206,7 @@ export async function PUT(request: Request) {
   }
 
   const owned = await prisma.material.findUnique({ where: { id: materialId } });
-  if (!owned || owned.authorId !== user.id) return NextResponse.json({ error: 'Materi tidak ditemukan.' }, { status: 404 });
+  if (!owned) return NextResponse.json({ error: 'Materi tidak ditemukan.' }, { status: 404 });
   if (!materialTitle) return NextResponse.json({ error: 'Judul materi wajib diisi.' }, { status: 400 });
 
   try {
@@ -261,7 +261,7 @@ export async function DELETE(request: Request) {
 
   const materialId = rawId;
   const owned = await prisma.material.findUnique({ where: { id: materialId } });
-  if (!owned || owned.authorId !== user.id) return NextResponse.json({ error: 'Materi tidak ditemukan.' }, { status: 404 });
+  if (!owned) return NextResponse.json({ error: 'Materi tidak ditemukan.' }, { status: 404 });
 
   try {
     await prisma.$transaction(async (tx) => {

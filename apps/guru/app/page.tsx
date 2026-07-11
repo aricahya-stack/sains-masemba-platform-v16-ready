@@ -15,10 +15,36 @@ import { StatGrid } from '../components/stat-grid';
 export default async function Page() {
   const user = await requireRole(UserRole.GURU);
   const [materials, tips, practiceQuestions, tryoutQuestions, tryouts, attempts] = await Promise.all([
-    prisma.material.count({ where: { authorId: user.id } }),
+    prisma.material.count(),
     prisma.tkadTip.count({ where: { authorId: user.id } }),
-    prisma.question.count({ where: { authorId: user.id, blueprintId: null } }),
-    prisma.question.count({ where: { authorId: user.id, blueprintId: { not: null } } }),
+    prisma.question.count({ where: {
+        tryoutQuestions: { none: {} },
+        NOT: {
+          blueprint: {
+            is: {
+              OR: [
+                { periodCode: 'TRYOUT_CONTENT' },
+                { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+      } }),
+    prisma.question.count({ where: {
+        OR: [
+          { tryoutQuestions: { some: {} } },
+          {
+            blueprint: {
+              is: {
+                OR: [
+                  { periodCode: 'TRYOUT_CONTENT' },
+                  { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        ],
+      } }),
     prisma.tryout.count({ where: { authorId: user.id } }),
     prisma.attempt.count({ where: { tryout: { authorId: user.id } } }),
   ]);
