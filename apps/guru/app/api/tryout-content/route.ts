@@ -65,14 +65,12 @@ function buildOptions(body: Record<string, unknown>) {
     .filter((item) => item.optionText);
   if (options.length < 2) throw new Error('Minimal dua opsi atau pernyataan harus diisi.');
 
-  const keySource = body.correctAnswers || body.correctOption;
+  const keySource = body.correctAnswers;
   const correctSet = new Set(splitKey(keySource).map((item) => item.toUpperCase()));
   const trueFalseMap = parseTrueFalseKey(keySource, options.map((option) => option.label));
   const data = options.map((option) => {
     if (questionType === QuestionType.TRUE_FALSE) {
-      if (!trueFalseMap.has(option.label)) {
-        throw new Error('Kunci benar-salah harus diisi untuk setiap pernyataan, misalnya B,S,B.');
-      }
+      if (!trueFalseMap.has(option.label)) throw new Error('Kunci benar-salah harus diisi untuk setiap pernyataan dengan format B,S,B.');
       return { ...option, isCorrect: Boolean(trueFalseMap.get(option.label)) };
     }
     if (questionType === QuestionType.SINGLE_CHOICE) {
@@ -91,7 +89,7 @@ function buildOptions(body: Record<string, unknown>) {
   return data;
 }
 
-function getCorrectAnswers(questionType: QuestionType, options: Array<{ label: string; isCorrect: boolean }>) {
+function correctAnswers(questionType: QuestionType, options: Array<{ label: string; isCorrect: boolean }>) {
   return questionType === QuestionType.TRUE_FALSE
     ? options.map((option) => (option.isCorrect ? 'B' : 'S')).join(',')
     : options.filter((option) => option.isCorrect).map((option) => option.label).join(',');
@@ -100,17 +98,26 @@ function getCorrectAnswers(questionType: QuestionType, options: Array<{ label: s
 async function serialize(questionId: string) {
   const question = await prisma.question.findUniqueOrThrow({
     where: { id: questionId },
-    include: { topic: true, options: { orderBy: { label: 'asc' } } },
+    include: { topic: true, blueprint: true, options: { orderBy: { label: 'asc' } } },
   });
+  if (!question.blueprint) throw new Error('Soal tryout tidak memiliki kisi-kisi.');
   const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
   return {
     id: question.id,
     _persisted: 'true',
+    testGroup: question.blueprint.testGroup || '',
+    blueprintId: question.blueprint.id,
+    blueprintCode: question.blueprint.code,
+    competency: question.blueprint.competency,
+    indicator: question.blueprint.indicator,
+    materialName: question.blueprint.materialName || '',
+    cognitiveLevel: question.blueprint.cognitiveLevel || '',
+    targetDifficulty: question.blueprint.targetDifficulty || '',
+    targetQuestionCount: String(question.blueprint.targetQuestionCount || 1),
+    blueprintText: question.blueprint.blueprintText || '',
     code: question.code,
     topicId: question.topicId,
     topicLabel: question.topic.title,
-    blueprintId: '',
-    blueprintLabel: 'Latihan',
     difficulty: question.difficulty || '',
     status: question.status,
     stimulusOrder: String(question.stimulusOrder),
@@ -124,16 +131,30 @@ async function serialize(questionId: string) {
     optionC: byLabel.C || '',
     optionD: byLabel.D || '',
     optionE: byLabel.E || '',
-    correctAnswers: getCorrectAnswers(question.questionType, question.options),
+    correctAnswers: correctAnswers(question.questionType, question.options),
   };
 }
 
-function buildQuestionData(body: Record<string, unknown>) {
-  const html = String(body.questionHtml || '').trim();
+function blueprintData(body: Record<string, unknown>) {
+  return {
+    testGroup: String(body.testGroup || '').trim() || null,
+    topicId: body.topicId ? String(body.topicId) : null,
+    competency: String(body.competency || '').trim(),
+    indicator: String(body.indicator || '').trim(),
+    materialName: body.materialName ? String(body.materialName) : null,
+    cognitiveLevel: body.cognitiveLevel ? String(body.cognitiveLevel) : null,
+    targetDifficulty: body.targetDifficulty ? String(body.targetDifficulty) : null,
+    targetQuestionCount: Math.max(1, toInt(body.targetQuestionCount, 1)),
+    blueprintText: body.blueprintText ? String(body.blueprintText) : null,
+  };
+}
+
+function questionData(body: Record<string, unknown>, blueprintId: string) {
+  const html = String(body.questionHtml || '');
   return {
     code: String(body.code || '').trim(),
     topicId: String(body.topicId || ''),
-    blueprintId: null,
+    blueprintId,
     stimulusOrder: Math.max(1, toInt(body.stimulusOrder, 1)),
     questionType: normalizeQuestionType(body.questionType),
     scoringMode: normalizeScoringMode(body.scoringMode),
@@ -147,9 +168,10 @@ function buildQuestionData(body: Record<string, unknown>) {
 }
 
 function validateBody(body: Record<string, unknown>) {
-  if (!String(body.code || '').trim() || !String(body.topicId || '').trim() || !String(body.questionHtml || '').trim()) {
-    throw new Error('Kode soal, topik, dan isi soal wajib diisi.');
-  }
+  if (!String(body.testGroup || '').trim()) throw new Error('Nama kelompok tryout wajib diisi.');
+  if (!String(body.blueprintCode || '').trim()) throw new Error('Kode kisi-kisi wajib diisi.');
+  if (!String(body.competency || '').trim() || !String(body.indicator || '').trim()) throw new Error('Kompetensi dan indikator kisi-kisi wajib diisi.');
+  if (!String(body.code || '').trim() || !String(body.topicId || '').trim() || !String(body.questionHtml || '').trim()) throw new Error('Kode soal, topik, dan isi soal wajib diisi.');
 }
 
 export async function POST(request: Request) {
@@ -159,14 +181,24 @@ export async function POST(request: Request) {
   try {
     validateBody(body);
     const options = buildOptions(body);
+    const blueprintCode = String(body.blueprintCode).trim();
     const question = await prisma.$transaction(async (tx) => {
-      const created = await tx.question.create({ data: { ...buildQuestionData(body), authorId: user.id } });
-      await tx.questionOption.createMany({ data: options.map((option) => ({ questionId: created.id, ...option })) });
+      const blueprint = await tx.blueprint.upsert({
+        where: { code: blueprintCode },
+        update: blueprintData(body),
+        create: { code: blueprintCode, ...blueprintData(body) },
+      });
+      const created = await tx.question.create({
+        data: { ...questionData(body, blueprint.id), authorId: user.id },
+      });
+      await tx.questionOption.createMany({
+        data: options.map((option) => ({ questionId: created.id, ...option })),
+      });
       return created;
     });
     return NextResponse.json({ data: await serialize(question.id) });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Gagal menyimpan soal latihan.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Gagal menyimpan data tryout.' }, { status: 400 });
   }
 }
 
@@ -176,23 +208,27 @@ export async function PUT(request: Request) {
   const body = (await request.json()) as Record<string, unknown>;
   const questionId = String(body.id || '');
   if (!questionId) return NextResponse.json({ error: 'ID soal wajib ada.' }, { status: 400 });
-
   const owned = await prisma.question.findUnique({ where: { id: questionId } });
-  if (!owned || owned.authorId !== user.id || owned.blueprintId) {
-    return NextResponse.json({ error: 'Soal latihan tidak ditemukan.' }, { status: 404 });
+  if (!owned || owned.authorId !== user.id || !owned.blueprintId) {
+    return NextResponse.json({ error: 'Soal tryout tidak ditemukan.' }, { status: 404 });
   }
 
   try {
     validateBody(body);
     const options = buildOptions(body);
+    const blueprintCode = String(body.blueprintCode).trim();
     await prisma.$transaction(async (tx) => {
-      await tx.question.update({ where: { id: questionId }, data: buildQuestionData(body) });
+      const blueprint = await tx.blueprint.update({
+        where: { id: owned.blueprintId! },
+        data: { code: blueprintCode, ...blueprintData(body) },
+      });
+      await tx.question.update({ where: { id: questionId }, data: questionData(body, blueprint.id) });
       await tx.questionOption.deleteMany({ where: { questionId } });
       await tx.questionOption.createMany({ data: options.map((option) => ({ questionId, ...option })) });
     });
     return NextResponse.json({ data: await serialize(questionId) });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : 'Gagal memperbarui soal latihan.' }, { status: 400 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : 'Gagal memperbarui data tryout.' }, { status: 400 });
   }
 }
 
@@ -202,12 +238,17 @@ export async function DELETE(request: Request) {
   const body = (await request.json()) as Record<string, unknown>;
   const questionId = String(body.id || '');
   const owned = await prisma.question.findUnique({ where: { id: questionId } });
-  if (!owned || owned.authorId !== user.id || owned.blueprintId) {
-    return NextResponse.json({ error: 'Soal latihan tidak ditemukan.' }, { status: 404 });
+  if (!owned || owned.authorId !== user.id || !owned.blueprintId) {
+    return NextResponse.json({ error: 'Soal tryout tidak ditemukan.' }, { status: 404 });
   }
 
   try {
-    await prisma.question.delete({ where: { id: questionId } });
+    await prisma.$transaction(async (tx) => {
+      const blueprintId = owned.blueprintId!;
+      await tx.question.delete({ where: { id: questionId } });
+      const remaining = await tx.question.count({ where: { blueprintId } });
+      if (remaining === 0) await tx.blueprint.delete({ where: { id: blueprintId } });
+    });
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: 'Soal tidak dapat dihapus karena sudah digunakan pada data pengerjaan siswa.' }, { status: 400 });

@@ -1,31 +1,66 @@
 import { prisma, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
-import { BookOpenCheck, ClipboardList, FileText, Library, Lightbulb, MonitorCog } from 'lucide-react';
+import {
+  BookOpenCheck,
+  ClipboardList,
+  FileQuestion,
+  FileText,
+  Lightbulb,
+  MonitorCog,
+  PencilRuler,
+} from 'lucide-react';
 import { PageHero } from '../components/page-hero';
 import { StatGrid } from '../components/stat-grid';
 
 export default async function Page() {
   const user = await requireRole(UserRole.GURU);
-  const [materials, tips, questions, tryouts, attempts] = await Promise.all([
+  const [materials, tips, practiceQuestions, tryoutQuestions, tryouts, attempts] = await Promise.all([
     prisma.material.count({ where: { authorId: user.id } }),
     prisma.tkadTip.count({ where: { authorId: user.id } }),
-    prisma.question.count({ where: { authorId: user.id } }),
+    prisma.question.count({ where: { authorId: user.id, blueprintId: null } }),
+    prisma.question.count({ where: { authorId: user.id, blueprintId: { not: null } } }),
     prisma.tryout.count({ where: { authorId: user.id } }),
     prisma.attempt.count({ where: { tryout: { authorId: user.id } } }),
   ]);
 
   const stats = [
-    { label: 'Materi saya', value: String(materials), note: 'Materi dapat diedit kapan saja.', badge: 'Konten' },
-    { label: 'Tips TKAD', value: String(tips), note: 'Strategi belajar untuk siswa.', badge: 'Tips' },
-    { label: 'Bank soal', value: String(questions), note: 'Soal terhubung kisi-kisi.', badge: 'Soal' },
-    { label: 'Tryout saya', value: String(tryouts), note: 'Sesi bisa dijeda dan dipantau.', badge: 'CBT' },
+    { label: 'Materi saya', value: String(materials), note: 'Topik dan materi diedit dalam satu tabel.', badge: 'Konten' },
+    { label: 'Soal latihan', value: String(practiceQuestions), note: 'Latihan tersedia di dalam materi siswa.', badge: 'Latihan' },
+    { label: 'Soal tryout', value: String(tryoutQuestions), note: 'Kisi-kisi dan soal berada dalam satu tabel.', badge: 'Tryout' },
+    { label: 'Jadwal tryout', value: String(tryouts), note: 'Paket 30 soal dapat dijadwalkan.', badge: 'Ujian' },
   ];
 
   const cards = [
-    { title: 'Kelola Belajar', text: 'Buat dan edit topik, materi, tujuan pembelajaran, LaTeX, dan media.', icon: BookOpenCheck, href: '/belajar' },
-    { title: 'Kelola Tips TKAD', text: 'Susun strategi, urutan tips, dan status publikasi untuk siswa.', icon: Lightbulb, href: '/tips-tkad' },
-    { title: 'Rakit tryout', text: 'Tentukan durasi, status, aturan, dan daftar kode soal.', icon: ClipboardList, href: '/tryout' },
-    { title: 'Kelola bank soal', text: 'Masukkan soal per paket tryout, lengkap dengan opsi dan pembahasan.', icon: Library, href: '/bank-soal' },
+    {
+      title: 'Topik & Materi',
+      text: 'Edit topik, materi, tujuan pembelajaran, LaTeX, dan media langsung di tabel.',
+      icon: BookOpenCheck,
+      href: '/belajar',
+    },
+    {
+      title: 'Latihan',
+      text: 'Kelola soal latihan yang tampil di dalam materi siswa.',
+      icon: PencilRuler,
+      href: '/latihan',
+    },
+    {
+      title: 'Tips TKAD',
+      text: 'Susun strategi, urutan tips, dan status publikasi untuk siswa.',
+      icon: Lightbulb,
+      href: '/tips-tkad',
+    },
+    {
+      title: 'Konten Tryout',
+      text: 'Edit kisi-kisi dan soal tryout langsung dalam satu tabel.',
+      icon: FileQuestion,
+      href: '/tryout',
+    },
+    {
+      title: 'Mapping Tryout',
+      text: 'Pilih paket 30 soal, atur durasi, status, serta jadwal pelaksanaannya.',
+      icon: ClipboardList,
+      href: '/mapping-tryout',
+    },
   ];
 
   return (
@@ -33,7 +68,7 @@ export default async function Page() {
       <PageHero
         eyebrow="Guru"
         title={`Selamat datang, ${user.fullName}`}
-        description="Kelola Belajar, Tips TKAD, Tryout, dan Bank Soal dari satu portal, lalu pantau pelaksanaan ujian siswa."
+        description="Kelola topik dan materi, latihan, konten tryout, serta penjadwalan ujian dari satu portal."
       />
       <StatGrid items={stats} />
       <div className="dashboard-card-grid">
@@ -59,10 +94,10 @@ export default async function Page() {
           </div>
           <div className="kv-list">
             <div><strong>{materials}</strong><span> materi tersimpan</span></div>
-            <div><strong>{tips}</strong><span> tips TKAD tersimpan</span></div>
-            <div><strong>{questions}</strong><span> soal siap dikelola</span></div>
-            <div><strong>{tryouts}</strong><span> paket tryout</span></div>
-            <div><strong>{attempts}</strong><span> attempt siswa</span></div>
+            <div><strong>{practiceQuestions}</strong><span> soal latihan</span></div>
+            <div><strong>{tryoutQuestions}</strong><span> soal tryout</span></div>
+            <div><strong>{tryouts}</strong><span> jadwal tryout</span></div>
+            <div><strong>{attempts}</strong><span> pengerjaan siswa</span></div>
           </div>
         </section>
         <section className="card stack">
@@ -73,7 +108,9 @@ export default async function Page() {
             </div>
             <MonitorCog size={24} />
           </div>
-          <div className="notice">Urutan kerja: susun topik dan materi, publikasikan Tips TKAD, siapkan bank soal, rakit tryout, lalu pantau hasil siswa.</div>
+          <div className="notice">
+            Susun topik dan materi, impor atau edit soal latihan, impor konten tryout berisi 30 soal beserta kisi-kisinya, lalu jadwalkan paket melalui Mapping Tryout.
+          </div>
         </section>
       </div>
     </div>

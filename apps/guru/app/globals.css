@@ -1189,3 +1189,38 @@ body { font-family: var(--app-font, Inter, ui-sans-serif, system-ui, -apple-syst
   .manager-page-size { justify-content: space-between; }
   .manager-pagination-actions { justify-content: space-between; }
 }
+
+/* Inline table editors for teacher content management */
+.inline-manager-card { overflow: hidden; }
+.inline-table-wrapper { border-radius: 16px; }
+.inline-data-table .expand-col { width: 58px; text-align: center; }
+.inline-data-table .actions-col { min-width: 190px; }
+.inline-editor-row > td { padding: 0 !important; background: color-mix(in srgb, var(--primary) 4%, var(--surface)); }
+.inline-table-editor {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 4%, var(--surface));
+}
+.inline-table-editor-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.inline-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.inline-editor-actions { justify-content: flex-start; flex-wrap: wrap; }
+.inline-new-editor { border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+.icon-button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: inline-grid;
+  place-items: center;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.icon-button:hover { border-color: var(--primary); color: var(--primary); }
+@media (max-width: 900px) {
+  .inline-form-grid { grid-template-columns: 1fr; }
+  .inline-data-table .actions-col { min-width: 165px; }
+}

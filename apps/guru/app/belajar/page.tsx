@@ -1,95 +1,95 @@
 import { prisma, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
-import { EditableManager, type FieldDef } from '../../components/editable-manager';
+import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
 export default async function BelajarPage() {
   const user = await requireRole(UserRole.GURU);
-  const [topics, materials] = await Promise.all([
-    prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
-    prisma.material.findMany({
-      where: { authorId: user.id },
-      include: {
-        topic: true,
-        objectives: { orderBy: { orderNo: 'asc' } },
-        sections: { orderBy: { orderNo: 'asc' } },
+  const topics = await prisma.topic.findMany({
+    include: {
+      materials: {
+        where: { authorId: user.id },
+        include: {
+          objectives: { orderBy: { orderNo: 'asc' } },
+          sections: { orderBy: { orderNo: 'asc' } },
+        },
+        orderBy: { updatedAt: 'desc' },
       },
-      orderBy: { updatedAt: 'desc' },
-    }),
-  ]);
+    },
+    orderBy: [{ orderNo: 'asc' }, { title: 'asc' }],
+  });
 
-  const topicFields: FieldDef[] = [
-    { name: 'title', label: 'Nama topik' },
+  const fields: InlineFieldDef[] = [
+    { name: 'topicTitle', label: 'Nama topik' },
     { name: 'subject', label: 'Mata pelajaran / rumpun', placeholder: 'Contoh: IPA SMP' },
-    { name: 'orderNo', label: 'Urutan tampil' },
-    { name: 'description', label: 'Deskripsi topik', type: 'textarea' },
-  ];
-
-  const materialFields: FieldDef[] = [
-    { name: 'title', label: 'Judul materi' },
-    { name: 'topicId', label: 'Topik', type: 'select', options: topics.map((topic) => ({ value: topic.id, label: topic.title })) },
+    { name: 'orderNo', label: 'Urutan tampil', type: 'number' },
+    { name: 'topicDescription', label: 'Deskripsi topik', type: 'richtext', full: true },
+    { name: 'materialTitle', label: 'Judul materi' },
     { name: 'level', label: 'Level / kelas' },
-    { name: 'status', label: 'Status', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
-    { name: 'summaryHtml', label: 'Ringkasan materi (HTML / LaTeX)', type: 'richtext' },
-    { name: 'objectivesText', label: 'Tujuan pembelajaran (1 baris = 1 tujuan)', type: 'textarea' },
-    { name: 'sectionsHtml', label: 'Isi materi utama (HTML / LaTeX)', type: 'richtext' },
-    { name: 'coverImageUrl', label: 'URL gambar cover', full: true },
+    { name: 'status', label: 'Status materi', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
+    { name: 'coverImageUrl', label: 'URL gambar cover' },
+    { name: 'summaryHtml', label: 'Ringkasan materi', type: 'richtext', full: true },
+    { name: 'objectivesText', label: 'Tujuan pembelajaran', type: 'richtext', full: true },
+    { name: 'sectionsHtml', label: 'Isi materi utama', type: 'richtext', full: true },
   ];
 
-  const topicRows = topics.map((topic) => ({
-    id: topic.id,
-    title: topic.title,
-    slug: topic.slug,
-    subject: topic.subject,
-    description: topic.description || '',
-    orderNo: String(topic.orderNo),
-  }));
-
-  const materialRows = materials.map((material) => ({
-    id: material.id,
-    title: material.title,
-    topicId: material.topicId,
-    topicLabel: material.topic.title,
-    level: material.level || '',
-    status: material.status,
-    summaryHtml: material.summaryHtml || material.summaryText || '',
-    objectivesText: material.objectives.map((item) => item.objective).join('\n'),
-    sectionsHtml: material.sections.map((item) => item.contentHtml || item.contentText || '').join('\n<hr />\n'),
-    coverImageUrl: material.coverImageUrl || '',
-  }));
+  const initialRows = topics.flatMap((topic) => {
+    if (!topic.materials.length) {
+      return [{
+        id: `topic:${topic.id}`,
+        _persisted: 'true',
+        topicId: topic.id,
+        materialId: '',
+        topicTitle: topic.title,
+        subject: topic.subject,
+        orderNo: String(topic.orderNo),
+        topicDescription: topic.description || '',
+        materialTitle: '',
+        level: '',
+        status: 'DRAFT',
+        summaryHtml: '',
+        objectivesText: '',
+        sectionsHtml: '',
+        coverImageUrl: '',
+      }];
+    }
+    return topic.materials.map((material) => ({
+      id: material.id,
+      _persisted: 'true',
+      topicId: topic.id,
+      materialId: material.id,
+      topicTitle: topic.title,
+      subject: topic.subject,
+      orderNo: String(topic.orderNo),
+      topicDescription: topic.description || '',
+      materialTitle: material.title,
+      level: material.level || '',
+      status: material.status,
+      summaryHtml: material.summaryHtml || material.summaryText || '',
+      objectivesText: material.objectives.map((item) => `<p>${item.objective}</p>`).join(''),
+      sectionsHtml: material.sections.map((item) => item.contentHtml || item.contentText || '').join('\n<hr />\n'),
+      coverImageUrl: material.coverImageUrl || '',
+    }));
+  });
 
   return (
-    <div className="stack">
-      <EditableManager
-        eyebrow="Belajar • Topik"
-        title="Kelola topik pembelajaran"
-        description="Tambah, ubah, urutkan, dan hapus topik. Topik yang sedang digunakan tidak dapat dihapus agar relasi materi dan soal tetap aman. Setelah menambah topik baru, muat ulang halaman agar topik muncul di pilihan materi."
-        entityName="topik"
-        endpoint="/api/topics"
-        fields={topicFields}
-        initialRows={topicRows}
-        tableColumns={[
-          { key: 'orderNo', label: 'Urutan' },
-          { key: 'title', label: 'Topik' },
-          { key: 'subject', label: 'Rumpun' },
-          { key: 'description', label: 'Deskripsi' },
-        ]}
-      />
-
-      <EditableManager
-        eyebrow="Belajar • Materi"
-        title="Kelola materi belajar"
-        description="Guru dapat membuat, mengedit, dan memublikasikan materi berdasarkan topik. Editor mendukung HTML ringan dan LaTeX."
-        entityName="materi"
-        endpoint="/api/materials"
-        fields={materialFields}
-        initialRows={materialRows}
-        tableColumns={[
-          { key: 'title', label: 'Judul materi' },
-          { key: 'topicLabel', label: 'Topik' },
-          { key: 'level', label: 'Level' },
-          { key: 'status', label: 'Status' },
-        ]}
-      />
-    </div>
+    <InlineEditableManager
+      eyebrow="Belajar"
+      title="Topik dan materi"
+      description="Topik dan materi kini dikelola dalam satu tabel. Buka baris untuk mengedit seluruh konten memakai editor WYSIWYG, lalu simpan langsung dari tabel."
+      entityName="topik dan materi"
+      endpoint="/api/topic-materials"
+      fields={fields}
+      initialRows={initialRows}
+      newRowDefaults={{ subject: 'IPA SMP', status: 'DRAFT', orderNo: '0' }}
+      addLabel="Tambah topik & materi"
+      tableTitle="Tabel topik dan materi"
+      tableColumns={[
+        { key: 'orderNo', label: 'Urutan' },
+        { key: 'topicTitle', label: 'Topik' },
+        { key: 'materialTitle', label: 'Materi' },
+        { key: 'level', label: 'Kelas' },
+        { key: 'status', label: 'Status' },
+      ]}
+    />
   );
 }

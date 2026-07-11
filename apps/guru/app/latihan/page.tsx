@@ -2,38 +2,22 @@ import { prisma, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
-export default async function TryoutPage() {
+export default async function LatihanPage() {
   const user = await requireRole(UserRole.GURU);
   const [topics, questions] = await Promise.all([
     prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
     prisma.question.findMany({
-      where: { authorId: user.id, blueprintId: { not: null } },
-      include: { topic: true, blueprint: true, options: { orderBy: { label: 'asc' } } },
-      orderBy: [{ stimulusOrder: 'asc' }, { code: 'asc' }],
+      where: { authorId: user.id, blueprintId: null },
+      include: { topic: true, options: { orderBy: { label: 'asc' } } },
+      orderBy: { code: 'asc' },
     }),
   ]);
 
-  const sortedQuestions = [...questions].sort((left, right) => {
-    const groupCompare = (left.blueprint?.testGroup || '').localeCompare(right.blueprint?.testGroup || '', 'id');
-    if (groupCompare !== 0) return groupCompare;
-    if (left.stimulusOrder !== right.stimulusOrder) return left.stimulusOrder - right.stimulusOrder;
-    return left.code.localeCompare(right.code, 'id');
-  });
-
   const fields: InlineFieldDef[] = [
-    { name: 'testGroup', label: 'Nama kelompok tryout' },
-    { name: 'blueprintCode', label: 'Kode kisi-kisi' },
+    { name: 'code', label: 'Kode soal latihan' },
     { name: 'topicId', label: 'Topik', type: 'select', options: topics.map((topic) => ({ value: topic.id, label: topic.title })) },
-    { name: 'competency', label: 'Kompetensi', type: 'richtext', full: true },
-    { name: 'indicator', label: 'Indikator', type: 'richtext', full: true },
-    { name: 'materialName', label: 'Nama materi pada kisi-kisi' },
-    { name: 'cognitiveLevel', label: 'Level kognitif' },
-    { name: 'targetDifficulty', label: 'Target kesulitan' },
-    { name: 'targetQuestionCount', label: 'Target soal kisi-kisi', type: 'number' },
-    { name: 'blueprintText', label: 'Catatan kisi-kisi', type: 'richtext', full: true },
-    { name: 'code', label: 'Kode soal tryout' },
-    { name: 'difficulty', label: 'Kesulitan soal', type: 'select', options: ['Mudah', 'Sedang', 'Sulit'] },
-    { name: 'status', label: 'Status soal', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
+    { name: 'difficulty', label: 'Kesulitan', type: 'select', options: ['Mudah', 'Sedang', 'Sulit'] },
+    { name: 'status', label: 'Status', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
     { name: 'questionType', label: 'Jenis soal', type: 'select', options: [
       { value: 'SINGLE_CHOICE', label: 'Pilihan ganda biasa' },
       { value: 'MULTIPLE_CHOICE', label: 'Pilihan ganda kompleks' },
@@ -44,7 +28,7 @@ export default async function TryoutPage() {
       { value: 'PARTIAL_NO_PENALTY', label: 'Parsial tanpa penalti' },
     ] },
     { name: 'maxScore', label: 'Bobot soal', type: 'number' },
-    { name: 'stimulusOrder', label: 'Nomor / urutan soal', type: 'number' },
+    { name: 'stimulusOrder', label: 'Urutan soal', type: 'number' },
     { name: 'questionHtml', label: 'Soal / stimulus', type: 'richtext', full: true },
     { name: 'explanation', label: 'Pembahasan', type: 'richtext', full: true },
     { name: 'optionA', label: 'Opsi A / Pernyataan 1', type: 'richtext', full: true },
@@ -55,25 +39,16 @@ export default async function TryoutPage() {
     { name: 'correctAnswers', label: 'Kunci jawaban. PG: A; kompleks: A,C,D; benar-salah: B,S,B' },
   ];
 
-  const initialRows = sortedQuestions.map((question) => {
-    const blueprint = question.blueprint!;
+  const initialRows = questions.map((question) => {
     const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
     return {
       id: question.id,
       _persisted: 'true',
-      testGroup: blueprint.testGroup || '',
-      blueprintId: blueprint.id,
-      blueprintCode: blueprint.code,
-      competency: blueprint.competency,
-      indicator: blueprint.indicator,
-      materialName: blueprint.materialName || '',
-      cognitiveLevel: blueprint.cognitiveLevel || '',
-      targetDifficulty: blueprint.targetDifficulty || '',
-      targetQuestionCount: String(blueprint.targetQuestionCount || 1),
-      blueprintText: blueprint.blueprintText || '',
       code: question.code,
       topicId: question.topicId,
       topicLabel: question.topic.title,
+      blueprintId: '',
+      blueprintLabel: 'Latihan',
       difficulty: question.difficulty || '',
       status: question.status,
       stimulusOrder: String(question.stimulusOrder),
@@ -95,23 +70,21 @@ export default async function TryoutPage() {
 
   return (
     <InlineEditableManager
-      eyebrow="Ujian • Tryout"
-      title="Data tryout: kisi-kisi dan soal"
-      description="Setiap baris memuat kisi-kisi sekaligus soal tryout. Paket impor dirancang berisi tepat 30 soal per nama tryout. Seluruh konten dapat diedit langsung di tabel dengan WYSIWYG."
-      entityName="data tryout"
-      endpoint="/api/tryout-content"
+      eyebrow="Konten • Latihan"
+      title="Soal latihan dalam materi"
+      description="Latihan adalah soal yang tampil pada topik belajar siswa. Semua soal latihan di tabel ini tidak terhubung ke kisi-kisi tryout."
+      entityName="soal latihan"
+      endpoint="/api/questions"
       fields={fields}
       initialRows={initialRows}
-      newRowDefaults={{ status: 'DRAFT', questionType: 'SINGLE_CHOICE', scoringMode: 'EXACT_MATCH', maxScore: '1', stimulusOrder: '1', targetQuestionCount: '1' }}
-      addLabel="Tambah kisi-kisi & soal"
-      tableTitle="Tabel tryout"
+      newRowDefaults={{ status: 'DRAFT', questionType: 'SINGLE_CHOICE', scoringMode: 'EXACT_MATCH', maxScore: '1', stimulusOrder: '1', blueprintId: '' }}
+      addLabel="Tambah soal latihan"
+      tableTitle="Tabel soal latihan"
       tableColumns={[
-        { key: 'testGroup', label: 'Tryout' },
-        { key: 'stimulusOrder', label: 'No.' },
-        { key: 'blueprintCode', label: 'Kisi-kisi' },
-        { key: 'code', label: 'Kode soal' },
+        { key: 'code', label: 'Kode' },
         { key: 'topicLabel', label: 'Topik' },
         { key: 'questionType', label: 'Jenis' },
+        { key: 'difficulty', label: 'Kesulitan' },
         { key: 'status', label: 'Status' },
       ]}
     />

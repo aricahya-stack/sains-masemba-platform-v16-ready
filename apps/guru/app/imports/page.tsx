@@ -3,19 +3,33 @@ import { requireRole } from '@sh/core';
 import { ImportCenter } from '../../components/import-center';
 
 const templates = [
-  { title: 'Materi berbasis topik', description: 'Template topik, kartu belajar, materi, bagian, dan kode latihan.', href: '/templates/material-import-template.xlsx', code: 'MAT' },
-  { title: 'Kisi-kisi per tryout', description: 'Template kisi-kisi yang dipetakan ke Tryout 1, 2, 3, dan seterusnya.', href: '/templates/blueprint-import-template.xlsx', code: 'KISI' },
-  { title: 'Bank soal per tryout', description: 'Template soal PG biasa, PG kompleks, benar-salah, sistem penilaian, kunci, pembahasan, dan nama tryout.', href: '/templates/question-import-template.xlsx', code: 'SOAL' },
-  { title: 'Mapping tryout', description: 'Template paket tryout dan daftar kode soal, ideal 40 soal per paket.', href: '/templates/tryout-question-template.xlsx', code: 'TRY' },
+  {
+    title: 'Topik dan materi',
+    description: 'Satu file untuk membuat topik, materi, tujuan pembelajaran, dan bagian materi.',
+    href: '/templates/material-import-template.xlsx',
+    code: 'MATERI',
+  },
+  {
+    title: 'Soal latihan',
+    description: 'Soal yang tampil di dalam topik belajar siswa. File ini tidak digunakan untuk tryout.',
+    href: '/templates/practice-question-template.xlsx',
+    code: 'LATIHAN',
+  },
+  {
+    title: 'Kisi-kisi dan soal tryout',
+    description: 'Kisi-kisi dan soal berada dalam satu file. Setiap nama tryout wajib berisi tepat 30 soal.',
+    href: '/templates/tryout-content-template.xlsx',
+    code: 'TRYOUT 30',
+  },
 ];
 
 export default async function ImportsPage() {
   await requireRole(UserRole.GURU);
   return (
     <ImportCenter
-      eyebrow="Import excel"
+      eyebrow="Import Excel"
       title="Import konten guru"
-      description="Unduh template resmi. Format bank soal sudah mendukung PG biasa, PG kompleks, dan benar-salah."
+      description="Alur impor disederhanakan menjadi tiga file: topik-materi, soal latihan, serta kisi-kisi sekaligus soal tryout. Mapping dan jadwal tryout diatur melalui menu Mapping Tryout."
       templates={templates}
     />
   );
