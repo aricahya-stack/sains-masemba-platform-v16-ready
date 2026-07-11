@@ -9,7 +9,7 @@ import {
 } from '@sh/db';
 import { slugify, splitLines, toDateOrNull, toFloat, toInt } from './utils';
 
-export type ImportKind = 'MATERIAL' | 'BLUEPRINT' | 'QUESTION' | 'TRYOUT' | 'USER' | 'PARENT_LINK';
+export type ImportKind = 'MATERIAL' | 'BLUEPRINT' | 'QUESTION' | 'TRYOUT_CONTENT' | 'TRYOUT' | 'USER' | 'PARENT_LINK';
 export type ImportRow = Record<string, unknown>;
 
 export type ImportActor = {
@@ -314,13 +314,6 @@ async function importQuestions(rows: ImportRow[], actor: ImportActor): Promise<I
         topicCache.set(topicSlug, topic.id);
       }
 
-      const blueprintCode = text(row.kode_kisi_kisi);
-      const blueprint = blueprintCode ? await tx.blueprint.findUnique({ where: { code: blueprintCode } }) : null;
-      if (blueprintCode && !blueprint) {
-        result.details.missingBlueprints += 1;
-        if (result.warnings.length < 20) result.warnings.push(`Kisi-kisi ${blueprintCode} untuk soal ${code} belum ditemukan; soal tetap diimpor tanpa relasi kisi-kisi.`);
-      }
-
       const questionType = normalizeQuestionType(row.jenis_soal);
       const options = questionOptionData(row, questionType);
       const stimulusHtml = text(row.stimulus_html);
@@ -329,10 +322,13 @@ async function importQuestions(rows: ImportRow[], actor: ImportActor): Promise<I
       if (existing && actor.role !== UserRole.SUPER_ADMIN && existing.authorId !== actor.id) {
         throw new Error(`Kode soal ${code} sudah dimiliki guru lain dan tidak dapat ditimpa.`);
       }
+      if (existing?.blueprintId) {
+        throw new Error(`Kode soal ${code} sudah digunakan sebagai soal tryout. Gunakan kode lain untuk latihan.`);
+      }
 
       const data = {
         topicId,
-        blueprintId: blueprint?.id || null,
+        blueprintId: null,
         stimulusOrder: Math.max(1, toInt(row.urutan_stimulus, index + 1)),
         questionType,
         scoringMode: normalizeScoringMode(row.sistem_penilaian),
@@ -360,6 +356,122 @@ async function importQuestions(rows: ImportRow[], actor: ImportActor): Promise<I
       await tx.questionOption.createMany({ data: options.map((option) => ({ questionId: question.id, ...option })) });
       result.details.options += options.length;
 
+    }
+  }, { timeout: 60000 });
+
+  return result;
+}
+
+
+async function importTryoutContent(rows: ImportRow[], actor: ImportActor): Promise<ImportResult> {
+  const groupCounts = new Map<string, number>();
+  const seenCodes = new Set<string>();
+  for (const row of rows) {
+    const groupName = text(row.nama_tryout);
+    const questionCode = text(row.kode_soal);
+    if (!groupName) throw new Error('Setiap baris tryout wajib memiliki nama_tryout.');
+    if (!questionCode) throw new Error('Setiap baris tryout wajib memiliki kode_soal.');
+    if (seenCodes.has(questionCode)) throw new Error(`Kode soal ${questionCode} duplikat dalam file tryout.`);
+    seenCodes.add(questionCode);
+    groupCounts.set(groupName, (groupCounts.get(groupName) || 0) + 1);
+  }
+  for (const [groupName, count] of groupCounts) {
+    if (count !== 30) throw new Error(`Paket ${groupName} harus berisi tepat 30 soal. File ini berisi ${count} soal.`);
+  }
+
+  const result: ImportResult = {
+    kind: 'TRYOUT_CONTENT', processedRows: rows.length, created: 0, updated: 0, linked: 0, warnings: [],
+    details: { blueprintsCreated: 0, blueprintsUpdated: 0, questionsCreated: 0, questionsUpdated: 0, options: 0, topicsCreated: 0, tryoutGroups: groupCounts.size },
+  };
+
+  await prisma.$transaction(async (tx) => {
+    const topicCache = new Map<string, string>();
+    for (let index = 0; index < rows.length; index += 1) {
+      const row = rows[index];
+      const groupName = text(row.nama_tryout);
+      const blueprintCode = text(row.kode_kisi_kisi);
+      const competency = text(row.kompetensi);
+      const indicator = text(row.indikator);
+      const questionCode = text(row.kode_soal);
+      const topicTitle = text(row.topik);
+      const promptHtml = text(row.pertanyaan_html);
+      if (!blueprintCode || !competency || !indicator) {
+        throw new Error(`Baris ${index + 1}: kode_kisi_kisi, kompetensi, dan indikator wajib diisi.`);
+      }
+      if (!questionCode || !topicTitle || !promptHtml) {
+        throw new Error(`Baris ${index + 1}: kode_soal, topik, dan pertanyaan_html wajib diisi.`);
+      }
+
+      const topicSlug = slugify(topicTitle);
+      let topicId = topicCache.get(topicSlug);
+      if (!topicId) {
+        let topic = await tx.topic.findUnique({ where: { slug: topicSlug } });
+        if (!topic) {
+          topic = await tx.topic.create({ data: { title: topicTitle, slug: topicSlug, subject: 'IPA SMP' } });
+          result.details.topicsCreated += 1;
+        }
+        topicId = topic.id;
+        topicCache.set(topicSlug, topic.id);
+      }
+
+      const existingBlueprint = await tx.blueprint.findUnique({ where: { code: blueprintCode } });
+      const blueprintData = {
+        testGroup: groupName,
+        topicId,
+        competency,
+        indicator,
+        materialName: text(row.nama_materi) || null,
+        cognitiveLevel: text(row.level_kognitif) || null,
+        targetDifficulty: text(row.target_kesulitan) || null,
+        targetQuestionCount: Math.max(1, toInt(row.target_jumlah_soal, 1)),
+        blueprintText: text(row.catatan_kisi_kisi) || null,
+      };
+      const blueprint = existingBlueprint
+        ? await tx.blueprint.update({ where: { id: existingBlueprint.id }, data: blueprintData })
+        : await tx.blueprint.create({ data: { code: blueprintCode, ...blueprintData } });
+      if (existingBlueprint) result.details.blueprintsUpdated += 1;
+      else result.details.blueprintsCreated += 1;
+
+      const questionType = normalizeQuestionType(row.jenis_soal);
+      const options = questionOptionData(row, questionType);
+      const stimulusHtml = text(row.stimulus_html);
+      const questionHtml = [stimulusHtml, promptHtml].filter(Boolean).join('\n');
+      const existingQuestion = await tx.question.findUnique({ where: { code: questionCode } });
+      if (existingQuestion && actor.role !== UserRole.SUPER_ADMIN && existingQuestion.authorId !== actor.id) {
+        throw new Error(`Kode soal ${questionCode} sudah dimiliki guru lain dan tidak dapat ditimpa.`);
+      }
+      if (existingQuestion && !existingQuestion.blueprintId) {
+        throw new Error(`Kode soal ${questionCode} sudah digunakan sebagai soal latihan. Gunakan kode lain untuk tryout.`);
+      }
+
+      const questionData = {
+        topicId,
+        blueprintId: blueprint.id,
+        stimulusOrder: Math.max(1, toInt(row.urutan_soal, index + 1)),
+        questionType,
+        scoringMode: normalizeScoringMode(row.sistem_penilaian),
+        maxScore: Math.max(0.1, toFloat(row.bobot, 1)),
+        questionText: stripHtml(questionHtml),
+        questionHtml,
+        explanation: text(row.pembahasan_html) || null,
+        difficulty: text(row.tingkat_kesulitan) || null,
+        status: normalizePublishStatus(row.status),
+      };
+
+      const question = existingQuestion
+        ? await tx.question.update({ where: { id: existingQuestion.id }, data: questionData })
+        : await tx.question.create({ data: { code: questionCode, authorId: actor.id, ...questionData } });
+      if (existingQuestion) {
+        result.updated += 1;
+        result.details.questionsUpdated += 1;
+        await tx.questionOption.deleteMany({ where: { questionId: question.id } });
+      } else {
+        result.created += 1;
+        result.details.questionsCreated += 1;
+      }
+      await tx.questionOption.createMany({ data: options.map((option) => ({ questionId: question.id, ...option })) });
+      result.details.options += options.length;
+      result.linked += 1;
     }
   }, { timeout: 60000 });
 
@@ -496,6 +608,7 @@ export async function importRowsToDatabase(args: {
     case 'MATERIAL': return importMaterials(rows, actor);
     case 'BLUEPRINT': return importBlueprints(rows);
     case 'QUESTION': return importQuestions(rows, actor);
+    case 'TRYOUT_CONTENT': return importTryoutContent(rows, actor);
     case 'TRYOUT': return importTryouts(rows, actor);
     case 'USER':
       if (!allowAdminImports) throw new Error('Import user hanya tersedia untuk Super Admin.');
