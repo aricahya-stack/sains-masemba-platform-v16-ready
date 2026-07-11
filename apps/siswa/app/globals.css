@@ -1445,3 +1445,95 @@ body { font-family: var(--app-font, Inter, ui-sans-serif, system-ui, -apple-syst
     grid-template-columns: 1fr;
   }
 }
+
+
+/* ===== Patch UI siswa: navigasi tryout + opsi jawaban ===== */
+.exam-shell { align-items: start; }
+.exam-navigation-card {
+  align-self: start;
+  position: sticky;
+  top: 92px;
+  max-height: calc(100vh - 110px);
+  overflow: auto;
+}
+.exam-navigation-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.exam-nav-stat {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  padding: 10px 11px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--surface-muted);
+}
+.exam-nav-stat-label {
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.exam-nav-stat strong {
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.exam-nav-stat.time { background: color-mix(in srgb, var(--brand) 7%, var(--surface)); }
+.exam-nav-stat.answered { background: color-mix(in srgb, var(--success) 9%, var(--surface)); }
+.exam-nav-stat.doubt { background: color-mix(in srgb, var(--warning) 12%, var(--surface)); }
+.exam-nav-stat.warning { background: color-mix(in srgb, var(--surface-muted) 72%, var(--surface)); }
+.exam-nav-stat.warning.has-warning {
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border));
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+}
+.exam-option,
+.exam-option *,
+.exam-question-card .tf-statement,
+.exam-question-card .tf-statement *,
+.exam-question-card .tf-actions .button-secondary {
+  font-weight: 400 !important;
+}
+.exam-option .option-label,
+.exam-question-card .option-label {
+  flex: 0 0 auto;
+  font-weight: 400 !important;
+}
+.practice-answer-option {
+  width: 100%;
+  min-height: 52px;
+  justify-content: flex-end !important;
+  text-align: right;
+  font-weight: 400 !important;
+}
+.practice-answer-option *,
+.practice-option-text,
+.practice-option-text * {
+  font-weight: 400 !important;
+}
+.practice-answer-option > div {
+  display: inline;
+  min-width: 0;
+}
+.practice-option-label {
+  flex: 0 0 auto;
+  font-weight: 400 !important;
+}
+.practice-answer-option .checkbox-mark {
+  flex: 0 0 auto;
+  margin-left: 2px;
+}
+@media (max-width: 1024px) {
+  .exam-navigation-card {
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+  }
+}
+@media (max-width: 560px) {
+  .exam-navigation-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

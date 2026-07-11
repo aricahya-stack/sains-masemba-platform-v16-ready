@@ -9,8 +9,6 @@ import {
   isAnswered,
   normalizeSelectedIds,
   normalizeTrueFalseAnswers,
-  questionTypeLabel,
-  scoringModeLabel,
 } from '../lib/question-scoring';
 
 type ExamQuestion = {
@@ -250,10 +248,6 @@ export function ExamMode({
               />
             </span>
             <span className="badge">{tryoutTitle}</span>
-            <span className="badge">{timeText}</span>
-            <span className="badge success">Dijawab {answeredCount}</span>
-            <span className="badge warning">Ragu {doubtCount}</span>
-            <span className={`badge${warnings > 0 ? ' warning' : ''}`}>Warning {warnings}</span>
           </div>
         </div>
       </div>
@@ -263,10 +257,7 @@ export function ExamMode({
             <div>
               <strong>Soal {current + 1} dari {questions.length}</strong>
               <div className="muted">{currentQuestion.code}</div>
-              <div className="inline-group" style={{ marginTop: 8 }}>
-                <span className="badge">{questionTypeLabel(currentQuestion.questionType)}</span>
-                <span className="badge">{scoringModeLabel(currentQuestion.scoringMode)}</span>
-              </div>
+
             </div>
             <div className="inline-group">
               <div className="font-size-controls" aria-label="Ukuran font soal">
@@ -290,7 +281,7 @@ export function ExamMode({
             <div className="tf-list">
               {currentQuestion.options.map((option, index) => (
                 <div className="tf-row" key={option.id}>
-                  <div className="tf-statement"><strong>{index + 1}.</strong> <MathHtml html={option.text} /></div>
+                  <div className="tf-statement"><span className="option-label">{index + 1}.</span> <MathHtml html={option.text} /></div>
                   <div className="tf-actions">
                     <button
                       type="button"
@@ -320,7 +311,7 @@ export function ExamMode({
                   onClick={() => toggleMultiple(currentQuestion, option.id)}
                 >
                   <span className="checkbox-mark">{selectedIds.has(option.id) ? '☑' : '☐'}</span>
-                  <strong>{option.label}.</strong>
+                  <span className="option-label">{option.label}.</span>
                   <MathHtml html={option.text} />
                 </button>
               ))}
@@ -334,7 +325,7 @@ export function ExamMode({
                   className={`button-secondary exam-option${selectedIds.has(option.id) ? ' selected' : ''}`}
                   onClick={() => chooseSingle(currentQuestion, option.id)}
                 >
-                  <strong>{option.label}.</strong>
+                  <span className="option-label">{option.label}.</span>
                   <MathHtml html={option.text} />
                 </button>
               ))}
@@ -346,10 +337,28 @@ export function ExamMode({
             <button className="button" type="button" onClick={() => setCurrent((prev) => Math.min(questions.length - 1, prev + 1))}>Selanjutnya</button>
           </div>
         </section>
-        <aside className="card stack">
+        <aside className="card stack exam-navigation-card">
           <div>
             <div className="eyebrow">Navigasi soal</div>
             <strong>Nomor soal</strong>
+          </div>
+          <div className="exam-navigation-stats" aria-label="Ringkasan status tryout">
+            <div className="exam-nav-stat time">
+              <span className="exam-nav-stat-label">Waktu</span>
+              <strong>{timeText}</strong>
+            </div>
+            <div className="exam-nav-stat answered">
+              <span className="exam-nav-stat-label">Dijawab</span>
+              <strong>{answeredCount}/{questions.length}</strong>
+            </div>
+            <div className="exam-nav-stat doubt">
+              <span className="exam-nav-stat-label">Ragu-ragu</span>
+              <strong>{doubtCount}</strong>
+            </div>
+            <div className={`exam-nav-stat warning${warnings > 0 ? ' has-warning' : ''}`}>
+              <span className="exam-nav-stat-label">Warning</span>
+              <strong>{warnings}</strong>
+            </div>
           </div>
           <div className="question-nav">
             {questions.map((question, index) => {

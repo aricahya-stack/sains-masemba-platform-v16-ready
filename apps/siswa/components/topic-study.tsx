@@ -196,7 +196,7 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
                   <div className="tf-list">
                     {question.options.map((option, optionIndex) => (
                       <div className="tf-row" key={option.id}>
-                        <div className="tf-statement"><strong>{optionIndex + 1}.</strong> <MathHtml html={option.text} /></div>
+                        <div className="tf-statement practice-option-text"><span className="practice-option-label">{optionIndex + 1}.</span> <MathHtml html={option.text} /></div>
                         <div className="tf-actions">
                           <button
                             type="button"
@@ -222,12 +222,12 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
                       <button
                         key={option.id}
                         type="button"
-                        className={`button-secondary${selectedIds.has(option.id) ? ' active' : ''}`}
+                        className={`button-secondary practice-answer-option${selectedIds.has(option.id) ? ' active' : ''}`}
                         onClick={() => toggleMultipleAnswer(question.id, option.id)}
-                        style={{ justifyContent: 'flex-start', minHeight: 52 }}
                       >
+                        <span className="practice-option-label">{option.label}.</span>
+                        <MathHtml html={option.text} />
                         <span className="checkbox-mark">{selectedIds.has(option.id) ? '☑' : '☐'}</span>
-                        <strong style={{ marginRight: 8 }}>{option.label}.</strong> <MathHtml html={option.text} />
                       </button>
                     ))}
                   </div>
@@ -237,11 +237,11 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
                       <button
                         key={option.id}
                         type="button"
-                        className={`button-secondary${selectedIds.has(option.id) ? ' active' : ''}`}
+                        className={`button-secondary practice-answer-option${selectedIds.has(option.id) ? ' active' : ''}`}
                         onClick={() => setSingleAnswer(question.id, option.id)}
-                        style={{ justifyContent: 'flex-start', minHeight: 52 }}
                       >
-                        <strong style={{ marginRight: 8 }}>{option.label}.</strong> <MathHtml html={option.text} />
+                        <span className="practice-option-label">{option.label}.</span>
+                        <MathHtml html={option.text} />
                       </button>
                     ))}
                   </div>
