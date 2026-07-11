@@ -1,6 +1,6 @@
 import { prisma, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
-import { BadgeCheck, BookOpen, FileSpreadsheet, Radar, Settings2, ShieldCheck, Users } from 'lucide-react';
+import { BadgeCheck, BookOpenText, ClipboardList, FileSpreadsheet, MonitorCog, PencilRuler, Settings2, ShieldCheck, Users } from 'lucide-react';
 import { PageHero } from '../components/page-hero';
 import { StatGrid } from '../components/stat-grid';
 import { Timeline } from '../components/timeline';
@@ -8,22 +8,33 @@ import { Timeline } from '../components/timeline';
 export default async function Page() {
   await requireRole(UserRole.SUPER_ADMIN);
 
-  const [users, teachers, students, parents, materials, questions, tryouts, incidents] = await Promise.all([
+  const [users, teachers, students, parents, materials, practiceQuestions, tryoutQuestions, tryouts, tryoutGroupRows, incidents] = await Promise.all([
     prisma.user.count(),
-    prisma.user.count({ where: { role: 'GURU' } }),
-    prisma.user.count({ where: { role: 'SISWA' } }),
-    prisma.user.count({ where: { role: 'ORANG_TUA' } }),
+    prisma.user.count({ where: { role: UserRole.GURU } }),
+    prisma.user.count({ where: { role: UserRole.SISWA } }),
+    prisma.user.count({ where: { role: UserRole.ORANG_TUA } }),
     prisma.material.count(),
-    prisma.question.count(),
+    prisma.question.count({ where: { blueprintId: null } }),
+    prisma.question.count({ where: { blueprintId: { not: null } } }),
     prisma.tryout.count(),
+    prisma.question.findMany({ where: { blueprint: { is: { testGroup: { not: null } } } }, select: { authorId: true, blueprint: { select: { testGroup: true } } } }),
     prisma.tryoutIncident.findMany({ orderBy: { createdAt: 'desc' }, take: 5, include: { tryout: true } }),
   ]);
 
+  const groupTotals = new Map<string, number>();
+  for (const row of tryoutGroupRows) {
+    const groupName = row.blueprint?.testGroup;
+    if (!groupName) continue;
+    const key = `${row.authorId}::${groupName}`;
+    groupTotals.set(key, (groupTotals.get(key) || 0) + 1);
+  }
+  const completeGroups = Array.from(groupTotals.values()).filter((count) => count === 30).length;
   const stats = [
     { label: 'Total user', value: String(users), note: `${teachers} guru • ${students} siswa • ${parents} orang tua`, badge: 'User' },
-    { label: 'Total materi', value: String(materials), note: 'Materi belajar aktif dan draft.', badge: 'Konten' },
-    { label: 'Bank soal', value: String(questions), note: 'Soal dapat dipakai ulang untuk tryout.', badge: 'Akademik' },
-    { label: 'Tryout', value: String(tryouts), note: 'Sesi ujian dapat dipantau langsung.', badge: 'CBT' },
+    { label: 'Topik & materi', value: String(materials), note: 'Materi seluruh guru, termasuk draft dan publikasi.', badge: 'Konten' },
+    { label: 'Soal latihan', value: String(practiceQuestions), note: 'Soal yang tampil di dalam materi belajar.', badge: 'Latihan' },
+    { label: 'Soal Tryout', value: String(tryoutQuestions), note: `${completeGroups} kelompok memiliki tepat 30 soal.`, badge: 'Ujian' },
+    { label: 'Jadwal Tryout', value: String(tryouts), note: 'Jadwal hasil Mapping Tryout lintas guru.', badge: 'CBT' },
   ];
 
   const timelineItems = incidents.length
@@ -32,23 +43,25 @@ export default async function Page() {
         subtitle: `${item.tryout.title}${item.message ? ` • ${item.message}` : ''}`,
         time: item.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
       }))
-    : [{ title: 'Sistem siap', subtitle: 'Belum ada incident terbaru.', time: '-' }];
+    : [{ title: 'Sistem siap', subtitle: 'Belum ada insiden terbaru.', time: '-' }];
 
   const actions = [
-    { title: 'Manajemen user', text: 'Kelola akun guru, siswa, orang tua, dan super admin.', icon: Users, href: '/users' },
-    { title: 'Topik belajar', text: 'Atur topik yang menjadi dasar materi dan soal.', icon: BookOpen, href: '/topik' },
-    { title: 'Approval konten', text: 'Pantau materi dan soal sebelum dipublikasikan.', icon: BadgeCheck, href: '/approval' },
-    { title: 'Import Excel', text: 'Unduh template dan preview data Excel.', icon: FileSpreadsheet, href: '/imports' },
-    { title: 'Monitoring', text: 'Lihat aktivitas tryout dan warning terbaru.', icon: Radar, href: '/monitoring' },
+    { title: 'Manajemen user', text: 'Kelola akun guru, siswa, orang tua, dan Super Admin.', icon: Users, href: '/users' },
+    { title: 'Topik & materi', text: 'Edit seluruh topik dan materi langsung dalam tabel WYSIWYG.', icon: BookOpenText, href: '/belajar' },
+    { title: 'Konten Tryout', text: 'Kelola kisi-kisi dan soal Tryout dalam satu tabel.', icon: ClipboardList, href: '/tryout' },
+    { title: 'Mapping Tryout', text: 'Jadwalkan paket yang sudah memiliki tepat 30 soal.', icon: PencilRuler, href: '/mapping-tryout' },
+    { title: 'Approval konten', text: 'Pantau materi, latihan, konten Tryout, dan jadwal yang belum final.', icon: BadgeCheck, href: '/approval' },
+    { title: 'Import Excel', text: 'Import materi, latihan, serta kisi-kisi dan soal Tryout.', icon: FileSpreadsheet, href: '/imports' },
+    { title: 'Monitoring Tryout', text: 'Lihat pengerjaan siswa dan warning ujian terbaru.', icon: MonitorCog, href: '/monitoring' },
     { title: 'Settings', text: 'Atur palet warna, font, dan moto global.', icon: Settings2, href: '/settings' },
   ];
 
   return (
     <div className="stack">
       <PageHero
-        eyebrow="Super admin"
+        eyebrow="Super Admin"
         title="Pusat kendali Sains Masemba"
-        description="Dashboard dibuat lebih informatif dengan ringkasan user, konten, bank soal, tryout, aktivitas, dan pintasan kerja."
+        description="Dashboard telah diselaraskan dengan struktur Topik & Materi, Latihan, konten Tryout 30 soal, Mapping Tryout, dan monitoring ujian."
       />
       <StatGrid items={stats} />
       <div className="dashboard-card-grid admin-grid">
@@ -72,13 +85,13 @@ export default async function Page() {
             </div>
             <ShieldCheck size={26} />
           </div>
-          <p className="muted">Super admin mengendalikan data pengguna, topik, approval, import, monitoring, tema global, font, dan moto aplikasi.</p>
-          <div className="notice">Topbar dibuat netral. Warna utama platform diterapkan pada sidebar dan elemen aksi agar tampilan lebih fokus.</div>
+          <p className="muted">Super Admin dapat mengelola konten milik seluruh guru, menentukan pemilik konten, memvalidasi paket 30 soal, dan menjadwalkan Tryout tanpa Excel.</p>
+          <div className="notice">Soal Latihan dan soal Tryout dipisahkan berdasarkan relasi kisi-kisi sehingga keduanya tidak tercampur pada halaman siswa.</div>
         </section>
         <section className="card stack">
           <div>
             <div className="eyebrow">Aktivitas terbaru</div>
-            <strong>Jejak audit singkat</strong>
+            <strong>Jejak insiden Tryout</strong>
           </div>
           <Timeline items={timelineItems} />
         </section>

@@ -15,6 +15,10 @@ export async function POST(request: Request) {
     if (!body.kind || !Array.isArray(body.rows)) {
       return NextResponse.json({ error: 'Jenis import dan rows wajib dikirim.' }, { status: 400 });
     }
+    const allowedKinds: ImportKind[] = ['MATERIAL', 'QUESTION', 'TRYOUT_CONTENT', 'USER', 'PARENT_LINK'];
+    if (!allowedKinds.includes(body.kind)) {
+      return NextResponse.json({ error: 'Jenis import tidak didukung. Gunakan template user, relasi orang tua-siswa, materi, latihan, atau konten Tryout 30 soal.' }, { status: 400 });
+    }
     const data = await importRowsToDatabase({
       kind: body.kind,
       rows: body.rows,

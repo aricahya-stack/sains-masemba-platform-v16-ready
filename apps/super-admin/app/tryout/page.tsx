@@ -1,0 +1,129 @@
+import { prisma, UserRole } from '@sh/db';
+import { requireRole } from '@sh/core';
+import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
+
+export default async function TryoutAdminPage() {
+  const admin = await requireRole(UserRole.SUPER_ADMIN);
+  const [authors, topics, questions] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } },
+      orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
+      select: { id: true, fullName: true, role: true },
+    }),
+    prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
+    prisma.question.findMany({
+      where: { blueprintId: { not: null } },
+      include: { author: true, topic: true, blueprint: true, options: { orderBy: { label: 'asc' } } },
+      orderBy: [{ author: { fullName: 'asc' } }, { stimulusOrder: 'asc' }, { code: 'asc' }],
+    }),
+  ]);
+
+  const sortedQuestions = [...questions].sort((left, right) => {
+    const authorCompare = left.author.fullName.localeCompare(right.author.fullName, 'id');
+    if (authorCompare !== 0) return authorCompare;
+    const groupCompare = (left.blueprint?.testGroup || '').localeCompare(right.blueprint?.testGroup || '', 'id');
+    if (groupCompare !== 0) return groupCompare;
+    if (left.stimulusOrder !== right.stimulusOrder) return left.stimulusOrder - right.stimulusOrder;
+    return left.code.localeCompare(right.code, 'id');
+  });
+
+  const fields: InlineFieldDef[] = [
+    { name: 'authorId', label: 'Pemilik soal tryout', type: 'select', options: authors.map((author) => ({ value: author.id, label: `${author.fullName} • ${author.role === UserRole.GURU ? 'Guru' : 'Super Admin'}` })) },
+    { name: 'testGroup', label: 'Nama kelompok tryout' },
+    { name: 'blueprintCode', label: 'Kode kisi-kisi' },
+    { name: 'topicId', label: 'Topik', type: 'select', options: topics.map((topic) => ({ value: topic.id, label: topic.title })) },
+    { name: 'competency', label: 'Kompetensi', type: 'richtext', full: true },
+    { name: 'indicator', label: 'Indikator', type: 'richtext', full: true },
+    { name: 'materialName', label: 'Nama materi pada kisi-kisi' },
+    { name: 'cognitiveLevel', label: 'Level kognitif' },
+    { name: 'targetDifficulty', label: 'Target kesulitan' },
+    { name: 'targetQuestionCount', label: 'Target soal kisi-kisi', type: 'number' },
+    { name: 'blueprintText', label: 'Catatan kisi-kisi', type: 'richtext', full: true },
+    { name: 'code', label: 'Kode soal tryout' },
+    { name: 'difficulty', label: 'Kesulitan soal', type: 'select', options: ['Mudah', 'Sedang', 'Sulit'] },
+    { name: 'status', label: 'Status soal', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
+    { name: 'questionType', label: 'Jenis soal', type: 'select', options: [
+      { value: 'SINGLE_CHOICE', label: 'Pilihan ganda biasa' },
+      { value: 'MULTIPLE_CHOICE', label: 'Pilihan ganda kompleks' },
+      { value: 'TRUE_FALSE', label: 'Benar atau salah' },
+    ] },
+    { name: 'scoringMode', label: 'Sistem penilaian', type: 'select', options: [
+      { value: 'EXACT_MATCH', label: 'Exact match' },
+      { value: 'PARTIAL_NO_PENALTY', label: 'Parsial tanpa penalti' },
+    ] },
+    { name: 'maxScore', label: 'Bobot soal', type: 'number' },
+    { name: 'stimulusOrder', label: 'Nomor / urutan soal', type: 'number' },
+    { name: 'questionHtml', label: 'Soal / stimulus', type: 'richtext', full: true },
+    { name: 'explanation', label: 'Pembahasan', type: 'richtext', full: true },
+    { name: 'optionA', label: 'Opsi A / Pernyataan 1', type: 'richtext', full: true },
+    { name: 'optionB', label: 'Opsi B / Pernyataan 2', type: 'richtext', full: true },
+    { name: 'optionC', label: 'Opsi C / Pernyataan 3', type: 'richtext', full: true },
+    { name: 'optionD', label: 'Opsi D / Pernyataan 4', type: 'richtext', full: true },
+    { name: 'optionE', label: 'Opsi E / Pernyataan 5 (opsional)', type: 'richtext', full: true },
+    { name: 'correctAnswers', label: 'Kunci jawaban. PG: A; kompleks: A,C,D; benar-salah: B,S,B' },
+  ];
+
+  const initialRows = sortedQuestions.map((question) => {
+    const blueprint = question.blueprint!;
+    const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
+    return {
+      id: question.id,
+      _persisted: 'true',
+      authorId: question.authorId,
+      authorLabel: question.author.fullName,
+      testGroup: blueprint.testGroup || '',
+      blueprintId: blueprint.id,
+      blueprintCode: blueprint.code,
+      competency: blueprint.competency,
+      indicator: blueprint.indicator,
+      materialName: blueprint.materialName || '',
+      cognitiveLevel: blueprint.cognitiveLevel || '',
+      targetDifficulty: blueprint.targetDifficulty || '',
+      targetQuestionCount: String(blueprint.targetQuestionCount || 1),
+      blueprintText: blueprint.blueprintText || '',
+      code: question.code,
+      topicId: question.topicId,
+      topicLabel: question.topic.title,
+      difficulty: question.difficulty || '',
+      status: question.status,
+      stimulusOrder: String(question.stimulusOrder),
+      questionType: question.questionType,
+      scoringMode: question.scoringMode,
+      maxScore: String(question.maxScore || 1),
+      questionHtml: question.questionHtml || question.questionText,
+      explanation: question.explanation || '',
+      optionA: byLabel.A || '',
+      optionB: byLabel.B || '',
+      optionC: byLabel.C || '',
+      optionD: byLabel.D || '',
+      optionE: byLabel.E || '',
+      correctAnswers: question.questionType === 'TRUE_FALSE'
+        ? question.options.map((item) => (item.isCorrect ? 'B' : 'S')).join(',')
+        : question.options.filter((item) => item.isCorrect).map((item) => item.label).join(','),
+    };
+  });
+
+  return (
+    <InlineEditableManager
+      eyebrow="Ujian • Tryout"
+      title="Kelola kisi-kisi dan soal tryout"
+      description="Setiap baris memuat kisi-kisi sekaligus soal. Super Admin dapat mengelola paket milik seluruh guru dan mengedit semua bagian langsung di tabel dengan WYSIWYG."
+      entityName="data tryout"
+      endpoint="/api/tryout-content"
+      fields={fields}
+      initialRows={initialRows}
+      newRowDefaults={{ authorId: admin.id, status: 'DRAFT', questionType: 'SINGLE_CHOICE', scoringMode: 'EXACT_MATCH', maxScore: '1', stimulusOrder: '1', targetQuestionCount: '1' }}
+      addLabel="Tambah kisi-kisi & soal"
+      tableTitle="Tabel tryout"
+      tableColumns={[
+        { key: 'authorLabel', label: 'Pemilik' },
+        { key: 'testGroup', label: 'Tryout' },
+        { key: 'stimulusOrder', label: 'No.' },
+        { key: 'blueprintCode', label: 'Kisi-kisi' },
+        { key: 'code', label: 'Kode soal' },
+        { key: 'topicLabel', label: 'Topik' },
+        { key: 'status', label: 'Status' },
+      ]}
+    />
+  );
+}
