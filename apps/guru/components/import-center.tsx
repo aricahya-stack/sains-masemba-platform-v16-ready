@@ -196,6 +196,48 @@ function validateRows(kind: ImportKind, rows: ImportRow[]): ValidationState {
   };
 }
 
+function materialGroupKey(row: ImportRow) {
+  const topicCode = text(row.kode_topik || row.topicCode || row.topicSlug || row.topicTitle).toLowerCase();
+  const materialTitle = text(row.materialTitle).toLowerCase();
+  return `${topicCode}::${materialTitle}`;
+}
+
+/**
+ * Pecah import materi menjadi beberapa request kecil tanpa memisahkan section
+ * dari material yang sama. Ini mencegah request tunggal terlalu lama dan
+ * mengurangi risiko 504 pada serverless/Vercel.
+ */
+function chunkMaterialRows(rows: ImportRow[], maxRowsPerChunk = 30, maxGroupsPerChunk = 6) {
+  const groups = new Map<string, ImportRow[]>();
+  for (const row of rows) {
+    const key = materialGroupKey(row);
+    const current = groups.get(key) || [];
+    current.push(row);
+    groups.set(key, current);
+  }
+
+  const chunks: ImportRow[][] = [];
+  let currentChunk: ImportRow[] = [];
+  let currentGroupCount = 0;
+
+  for (const groupRows of groups.values()) {
+    const exceedsRows = currentChunk.length > 0 && currentChunk.length + groupRows.length > maxRowsPerChunk;
+    const exceedsGroups = currentChunk.length > 0 && currentGroupCount >= maxGroupsPerChunk;
+
+    if (exceedsRows || exceedsGroups) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentGroupCount = 0;
+    }
+
+    currentChunk.push(...groupRows);
+    currentGroupCount += 1;
+  }
+
+  if (currentChunk.length) chunks.push(currentChunk);
+  return chunks;
+}
+
 function mergeResults(current: ImportResult | null, incoming: ImportResult): ImportResult {
   if (!current) return incoming;
   const details = { ...current.details };
@@ -219,6 +261,9 @@ async function readJsonResponse(response: Response) {
   try {
     return JSON.parse(raw) as Record<string, any>;
   } catch {
+    if (response.status === 504) {
+      throw new Error('Server timeout (504). Import akan lebih aman jika diproses per beberapa material, bukan seluruh file sekaligus.');
+    }
     throw new Error(`Server mengembalikan respons non-JSON (${response.status}).`);
   }
 }
@@ -318,13 +363,19 @@ export function ImportCenter({
     setProgress('Menyiapkan import...');
 
     try {
-      const chunkSize = kind === 'QUESTION' ? 40 : rows.length;
-      const chunks: ImportRow[][] = [];
-      for (let index = 0; index < rows.length; index += chunkSize) chunks.push(rows.slice(index, index + chunkSize));
+      const chunks: ImportRow[][] = kind === 'MATERIAL'
+        ? chunkMaterialRows(rows)
+        : (() => {
+            const chunkSize = kind === 'QUESTION' ? 40 : rows.length;
+            const result: ImportRow[][] = [];
+            for (let index = 0; index < rows.length; index += chunkSize) result.push(rows.slice(index, index + chunkSize));
+            return result;
+          })();
 
       let aggregate: ImportResult | null = null;
+      let completedRows = 0;
       for (let index = 0; index < chunks.length; index += 1) {
-        setProgress(`Mengimpor bagian ${index + 1} dari ${chunks.length} (${Math.min((index + 1) * chunkSize, rows.length)}/${rows.length} baris)...`);
+        setProgress(`Mengimpor bagian ${index + 1} dari ${chunks.length} (${completedRows + chunks[index].length}/${rows.length} baris)...`);
         const response = await fetch('/api/imports', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -333,6 +384,7 @@ export function ImportCenter({
         const payload = await readJsonResponse(response);
         if (!response.ok) throw new Error(payload.error || `Import gagal pada bagian ${index + 1}.`);
         aggregate = mergeResults(aggregate, payload.data as ImportResult);
+        completedRows += chunks[index].length;
       }
 
       setImportResult(aggregate);
