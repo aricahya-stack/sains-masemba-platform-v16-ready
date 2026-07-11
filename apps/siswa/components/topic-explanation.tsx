@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { CheckCircle2, Search } from 'lucide-react';
 import { MathHtml } from './math-html';
 import { ExplanationTools } from './explanation-tools';
@@ -36,42 +36,38 @@ type TopicPayload = {
   questions: PracticeQuestion[];
 };
 
-const COMPLETED_KEY = 'sh_completed_topics';
-const ANSWERS_KEY = 'sh_topic_answers';
-
-function readJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? JSON.parse(raw) as T : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-export function TopicExplanation({ topics, initialQuery, selectedTopicId }: { topics: TopicPayload[]; initialQuery?: string; selectedTopicId?: string }) {
+export function TopicExplanation({
+  topics,
+  initialQuery,
+  selectedTopicId,
+  initialAnswers = {},
+  initialCompleted = {},
+}: {
+  topics: TopicPayload[];
+  initialQuery?: string;
+  selectedTopicId?: string;
+  initialAnswers?: Record<string, AnswerValue>;
+  initialCompleted?: Record<string, boolean>;
+}) {
   const [query, setQuery] = useState(initialQuery || '');
-  const [completed, setCompleted] = useState<Record<string, boolean>>({});
-  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
-  const [loaded, setLoaded] = useState(false);
+  const completed = initialCompleted;
+  const answers = initialAnswers;
 
-  useEffect(() => {
-    setCompleted(readJson<Record<string, boolean>>(COMPLETED_KEY, {}));
-    setAnswers(readJson<Record<string, AnswerValue>>(ANSWERS_KEY, {}));
-    setLoaded(true);
-  }, []);
+  const completedTopics = useMemo(
+    () => topics.filter((topic) => completed[topic.id]),
+    [topics, completed],
+  );
 
-  const completedTopics = useMemo(() => topics.filter((topic) => completed[topic.id]), [topics, completed]);
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const source = completedTopics;
-    if (!normalized) return source;
-    return source.filter((topic) => `${topic.title} ${topic.description} ${topic.subject}`.toLowerCase().includes(normalized));
+    if (!normalized) return completedTopics;
+    return completedTopics.filter((topic) => `${topic.title} ${topic.description} ${topic.subject}`.toLowerCase().includes(normalized));
   }, [completedTopics, query]);
-  const selectedTopic = useMemo(() => topics.find((topic) => topic.id === selectedTopicId) || null, [topics, selectedTopicId]);
 
-  if (!loaded) {
-    return <div className="empty-state">Memuat data pembahasan...</div>;
-  }
+  const selectedTopic = useMemo(
+    () => topics.find((topic) => topic.id === selectedTopicId) || null,
+    [topics, selectedTopicId],
+  );
 
   if (selectedTopic) {
     if (!completed[selectedTopic.id]) {

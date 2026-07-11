@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Search } from 'lucide-react';
 import { MathHtml } from './math-html';
 import {
@@ -42,10 +42,20 @@ type TopicPayload = {
   questions: PracticeQuestion[];
 };
 
-const COMPLETED_KEY = 'sh_completed_topics';
-const ANSWERS_KEY = 'sh_topic_answers';
+type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
-function readJson<T>(key: string, fallback: T): T {
+type SaveResponse = {
+  ok: boolean;
+  answered: boolean;
+  answeredCount: number;
+  totalQuestions: number;
+  completed: boolean;
+};
+
+const LEGACY_COMPLETED_KEY = 'sh_completed_topics';
+const LEGACY_ANSWERS_KEY = 'sh_topic_answers';
+
+function readLegacyJson<T>(key: string, fallback: T): T {
   try {
     const raw = window.localStorage.getItem(key);
     return raw ? JSON.parse(raw) as T : fallback;
@@ -54,78 +64,184 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-function writeJson(key: string, value: unknown) {
+function removeLegacyProgress() {
   try {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    window.localStorage.removeItem(LEGACY_COMPLETED_KEY);
+    window.localStorage.removeItem(LEGACY_ANSWERS_KEY);
   } catch {}
 }
 
-export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: TopicPayload[]; initialQuery?: string; selectedTopicId?: string }) {
+function hasAnyAnswer(value: AnswerValue) {
+  if (value === null || value === undefined || value === '') return false;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+  return true;
+}
+
+export function TopicStudy({
+  topics,
+  initialQuery,
+  selectedTopicId,
+  initialAnswers = {},
+  initialCompleted = {},
+}: {
+  topics: TopicPayload[];
+  initialQuery?: string;
+  selectedTopicId?: string;
+  initialAnswers?: Record<string, AnswerValue>;
+  initialCompleted?: Record<string, boolean>;
+}) {
   const [query, setQuery] = useState(initialQuery || '');
-  const [completed, setCompleted] = useState<Record<string, boolean>>({});
-  const [answers, setAnswers] = useState<Record<string, AnswerValue>>({});
+  const [completed, setCompleted] = useState<Record<string, boolean>>(initialCompleted);
+  const [answers, setAnswers] = useState<Record<string, AnswerValue>>(initialAnswers);
+  const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
+  const answersRef = useRef<Record<string, AnswerValue>>(initialAnswers);
+  const saveQueues = useRef<Record<string, Promise<boolean>>>({});
+  const saveVersions = useRef<Record<string, number>>({});
+  const topicSaveVersions = useRef<Record<string, number>>({});
+  const legacyMigrated = useRef(false);
 
-  useEffect(() => {
-    setCompleted(readJson<Record<string, boolean>>(COMPLETED_KEY, {}));
-    setAnswers(readJson<Record<string, AnswerValue>>(ANSWERS_KEY, {}));
-  }, []);
+  const selectedTopic = useMemo(
+    () => topics.find((topic) => topic.id === selectedTopicId) || null,
+    [topics, selectedTopicId],
+  );
 
-  const selectedTopic = useMemo(() => topics.find((topic) => topic.id === selectedTopicId) || null, [topics, selectedTopicId]);
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return topics;
     return topics.filter((topic) => `${topic.title} ${topic.description} ${topic.subject}`.toLowerCase().includes(normalized));
   }, [topics, query]);
 
-  const persistAnswer = (questionId: string, value: AnswerValue) => {
-    setAnswers((prev) => {
-      const next = { ...prev, [questionId]: value };
-      writeJson(ANSWERS_KEY, next);
-      return next;
+  const questionIndex = useMemo(() => {
+    const index = new Map<string, { topicId: string; question: PracticeQuestion }>();
+    for (const topic of topics) {
+      for (const question of topic.questions) {
+        index.set(question.id, { topicId: topic.id, question });
+      }
+    }
+    return index;
+  }, [topics]);
+
+  const updateLocalAnswer = (questionId: string, value: AnswerValue) => {
+    const next = { ...answersRef.current, [questionId]: value };
+    answersRef.current = next;
+    setAnswers(next);
+  };
+
+  const enqueueSave = (topicId: string, questionId: string, value: AnswerValue) => {
+    const version = (saveVersions.current[questionId] || 0) + 1;
+    saveVersions.current[questionId] = version;
+    const topicVersion = (topicSaveVersions.current[topicId] || 0) + 1;
+    topicSaveVersions.current[topicId] = topicVersion;
+
+    const previous = saveQueues.current[questionId] || Promise.resolve(true);
+    const task = previous
+      .catch(() => false)
+      .then(async () => {
+        if (saveVersions.current[questionId] === version) {
+          setSaveStates((current) => ({ ...current, [questionId]: 'saving' }));
+        }
+
+        const response = await fetch(`/api/practice-progress/${encodeURIComponent(topicId)}/answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ questionId, answer: value }),
+        });
+
+        const payload = await response.json().catch(() => ({})) as Partial<SaveResponse> & { error?: string };
+        if (!response.ok || !payload.ok) {
+          throw new Error(payload.error || 'Gagal menyimpan jawaban.');
+        }
+
+        if (topicSaveVersions.current[topicId] === topicVersion) {
+          setCompleted((current) => ({ ...current, [topicId]: Boolean(payload.completed) }));
+        }
+
+        if (saveVersions.current[questionId] === version) {
+          setSaveStates((current) => ({ ...current, [questionId]: 'saved' }));
+        }
+        return true;
+      })
+      .catch(() => {
+        if (saveVersions.current[questionId] === version) {
+          setSaveStates((current) => ({ ...current, [questionId]: 'error' }));
+        }
+        return false;
+      });
+
+    saveQueues.current[questionId] = task;
+    return task;
+  };
+
+  const persistAnswer = (topicId: string, questionId: string, value: AnswerValue) => {
+    updateLocalAnswer(questionId, value);
+    void enqueueSave(topicId, questionId, value);
+  };
+
+  const setSingleAnswer = (topicId: string, questionId: string, optionId: string) => {
+    persistAnswer(topicId, questionId, optionId);
+  };
+
+  const toggleMultipleAnswer = (topicId: string, questionId: string, optionId: string) => {
+    const selected = new Set(normalizeSelectedIds(answersRef.current[questionId]));
+    if (selected.has(optionId)) selected.delete(optionId);
+    else selected.add(optionId);
+    persistAnswer(topicId, questionId, Array.from(selected));
+  };
+
+  const setTrueFalseAnswer = (topicId: string, questionId: string, optionId: string, value: boolean) => {
+    persistAnswer(topicId, questionId, {
+      ...normalizeTrueFalseAnswers(answersRef.current[questionId]),
+      [optionId]: value,
     });
   };
 
-  const setSingleAnswer = (questionId: string, optionId: string) => {
-    persistAnswer(questionId, optionId);
-  };
-
-  const toggleMultipleAnswer = (questionId: string, optionId: string) => {
-    setAnswers((prev) => {
-      const selected = new Set(normalizeSelectedIds(prev[questionId]));
-      if (selected.has(optionId)) selected.delete(optionId);
-      else selected.add(optionId);
-      const next = { ...prev, [questionId]: Array.from(selected) };
-      writeJson(ANSWERS_KEY, next);
-      return next;
-    });
-  };
-
-  const setTrueFalseAnswer = (questionId: string, optionId: string, value: boolean) => {
-    setAnswers((prev) => {
-      const next = {
-        ...prev,
-        [questionId]: {
-          ...normalizeTrueFalseAnswers(prev[questionId]),
-          [optionId]: value,
-        },
-      };
-      writeJson(ANSWERS_KEY, next);
-      return next;
-    });
-  };
-
+  // Migrasi sekali dari localStorage versi lama ke database, supaya progres lama tidak hilang.
   useEffect(() => {
-    if (!selectedTopic || selectedTopic.questions.length === 0) return;
-    const finished = selectedTopic.questions.every((question) => isAnswered(question, answers[question.id]));
-    if (!finished || completed[selectedTopic.id]) return;
-    const next = { ...completed, [selectedTopic.id]: true };
-    setCompleted(next);
-    writeJson(COMPLETED_KEY, next);
-  }, [answers, completed, selectedTopic]);
+    if (legacyMigrated.current) return;
+    legacyMigrated.current = true;
+
+    const legacyAnswers = readLegacyJson<Record<string, AnswerValue>>(LEGACY_ANSWERS_KEY, {});
+    const candidates = Object.entries(legacyAnswers).filter(([questionId, value]) => {
+      const indexed = questionIndex.get(questionId);
+      if (!indexed || Object.prototype.hasOwnProperty.call(initialAnswers, questionId)) return false;
+      return hasAnyAnswer(value);
+    });
+
+    if (!candidates.length) {
+      removeLegacyProgress();
+      return;
+    }
+
+    let cancelled = false;
+    void (async () => {
+      let allSaved = true;
+
+      for (const [questionId, value] of candidates) {
+        if (cancelled) return;
+        const indexed = questionIndex.get(questionId);
+        if (!indexed) continue;
+
+        updateLocalAnswer(questionId, value);
+        const saved = await enqueueSave(indexed.topicId, questionId, value);
+        if (!saved) allSaved = false;
+      }
+
+      if (!cancelled && allSaved) {
+        removeLegacyProgress();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // Jalankan hanya sekali untuk migrasi data browser lama.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionIndex]);
 
   if (selectedTopic) {
     const finishedQuestionCount = selectedTopic.questions.filter((question) => isAnswered(question, answers[question.id])).length;
-    const isTopicDone = Boolean(completed[selectedTopic.id]) || (selectedTopic.questions.length > 0 && finishedQuestionCount === selectedTopic.questions.length);
+    const isTopicDone = Boolean(completed[selectedTopic.id]);
 
     return (
       <div className="stack">
@@ -169,7 +285,7 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
           <div>
             <div className="eyebrow">Latihan topik</div>
             <strong>Kerjakan latihan pada topik ini</strong>
-            <p className="muted">Topik otomatis bertanda selesai setelah semua latihan dijawab. Pembahasan dapat dibuka melalui menu Pembahasan.</p>
+            <p className="muted">Jawaban dan status selesai tersimpan di database, sehingga tetap tersedia saat login dari perangkat lain. Pembahasan terbuka setelah seluruh latihan terjawab.</p>
           </div>
           {selectedTopic.questions.length === 0 ? <div className="empty-state">Belum ada latihan pada topik ini.</div> : null}
           {selectedTopic.questions.map((question, index) => {
@@ -177,12 +293,23 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
             const answered = isAnswered(question, selected);
             const selectedIds = new Set(normalizeSelectedIds(selected));
             const trueFalseMap = normalizeTrueFalseAnswers(selected);
+            const saveState = saveStates[question.id] || 'idle';
+            const statusText = saveState === 'saving'
+              ? 'Menyimpan ke database...'
+              : saveState === 'error'
+                ? 'Gagal menyimpan. Pilih jawaban lagi untuk mencoba ulang.'
+                : answered
+                  ? 'Jawaban tersimpan di database'
+                  : hasAnyAnswer(selected)
+                    ? 'Jawaban sementara tersimpan di database'
+                    : 'Belum dijawab';
+
             return (
               <article className="practice-card" key={question.id}>
                 <div className="item-head">
                   <div>
                     <strong>{index + 1}. {question.code}</strong>
-                    <div className="muted">{answered ? 'Jawaban tersimpan' : 'Belum dijawab'}</div>
+                    <div className="muted">{statusText}</div>
                     <div className="inline-group" style={{ marginTop: 8 }}>
                       <span className="badge">{questionTypeLabel(question.questionType)}</span>
                       <span className="badge">{scoringModeLabel(question.scoringMode)}</span>
@@ -201,14 +328,14 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
                           <button
                             type="button"
                             className={`button-secondary${trueFalseMap[option.id] === true ? ' active' : ''}`}
-                            onClick={() => setTrueFalseAnswer(question.id, option.id, true)}
+                            onClick={() => setTrueFalseAnswer(selectedTopic.id, question.id, option.id, true)}
                           >
                             Benar
                           </button>
                           <button
                             type="button"
                             className={`button-secondary${trueFalseMap[option.id] === false ? ' active' : ''}`}
-                            onClick={() => setTrueFalseAnswer(question.id, option.id, false)}
+                            onClick={() => setTrueFalseAnswer(selectedTopic.id, question.id, option.id, false)}
                           >
                             Salah
                           </button>
@@ -223,7 +350,7 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
                         key={option.id}
                         type="button"
                         className={`button-secondary practice-answer-option${selectedIds.has(option.id) ? ' active' : ''}`}
-                        onClick={() => toggleMultipleAnswer(question.id, option.id)}
+                        onClick={() => toggleMultipleAnswer(selectedTopic.id, question.id, option.id)}
                       >
                         <span className="practice-option-label">{option.label}.</span>
                         <MathHtml html={option.text} />
@@ -238,7 +365,7 @@ export function TopicStudy({ topics, initialQuery, selectedTopicId }: { topics: 
                         key={option.id}
                         type="button"
                         className={`button-secondary practice-answer-option${selectedIds.has(option.id) ? ' active' : ''}`}
-                        onClick={() => setSingleAnswer(question.id, option.id)}
+                        onClick={() => setSingleAnswer(selectedTopic.id, question.id, option.id)}
                       >
                         <span className="practice-option-label">{option.label}.</span>
                         <MathHtml html={option.text} />

@@ -58,6 +58,7 @@ model User {
   questions      Question[]          @relation("QuestionAuthor")
   tryouts        Tryout[]            @relation("TryoutAuthor")
   attempts       Attempt[]
+  practiceAttempts PracticeAttempt[]
   parentChildren ParentStudentLink[] @relation("ParentUser")
   childParents   ParentStudentLink[] @relation("StudentUser")
 }
@@ -92,6 +93,7 @@ model Topic {
   materials   Material[]
   blueprints  Blueprint[]
   questions   Question[]
+  practiceAttempts PracticeAttempt[]
 }
 
 model Material {
@@ -184,6 +186,7 @@ model Question {
   options         QuestionOption[]
   tryoutQuestions TryoutQuestion[]
   attemptAnswers  AttemptAnswer[]
+  practiceAnswers PracticeAnswer[]
 }
 
 model QuestionOption {
@@ -252,6 +255,42 @@ model AttemptAnswer {
   selectedOption   QuestionOption? @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
 
   @@unique([attemptId, questionId])
+}
+
+
+model PracticeAttempt {
+  id          String           @id @default(cuid())
+  userId      String
+  topicId     String
+  score       Float            @default(0)
+  startedAt   DateTime         @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime         @updatedAt
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic       Topic            @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  answers     PracticeAnswer[]
+
+  @@unique([userId, topicId])
+  @@index([userId])
+  @@index([topicId])
+}
+
+model PracticeAnswer {
+  id                String          @id @default(cuid())
+  attemptId         String
+  questionId        String
+  selectedOptionId  String?
+  selectedOptionIds String[]        @default([])
+  trueFalseAnswers  Json?
+  score             Float           @default(0)
+  isCorrect         Boolean         @default(false)
+  isAnswered        Boolean         @default(false)
+  answeredAt        DateTime        @default(now())
+  attempt           PracticeAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question          Question        @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([questionId])
 }
 
 model TryoutIncident {

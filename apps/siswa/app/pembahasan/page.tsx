@@ -5,6 +5,7 @@ import { PageHero } from '../../components/page-hero';
 import { MathHtml } from '../../components/math-html';
 import { ExplanationTools } from '../../components/explanation-tools';
 import { TopicExplanation } from '../../components/topic-explanation';
+import { loadPracticeProgress } from '../../lib/practice-progress-server';
 import {
   formatCorrectAnswer,
   formatStudentAnswer,
@@ -14,62 +15,6 @@ import {
   questionTypeLabel,
   type AnswerValue,
 } from '../../lib/question-scoring';
-
-type TopicQuestionPayload = {
-  id: string;
-  code: string;
-  html: string;
-  explanation: string;
-  questionType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
-  scoringMode: 'EXACT_MATCH' | 'PARTIAL_NO_PENALTY';
-  maxScore: number;
-  options: { id: string; label: string; text: string; isCorrect: boolean }[];
-};
-
-function tkaTopicExamples(topicId: string): TopicQuestionPayload[] {
-  return [
-    {
-      id: `${topicId}-contoh-tka-kompleks`,
-      code: 'CONTOH-TKA-KOMPLEKS',
-      html: '<p>Perhatikan pernyataan tentang energi pada benda yang jatuh dari ketinggian tertentu. Pernyataan yang benar adalah ...</p>',
-      explanation: '<p>Saat ketinggian benda berkurang, energi potensial menurun. Energi kinetik meningkat karena kecepatan bertambah. Energi mekanik tetap jika hambatan udara diabaikan.</p>',
-      questionType: 'MULTIPLE_CHOICE',
-      scoringMode: 'PARTIAL_NO_PENALTY',
-      maxScore: 1,
-      options: [
-        { id: `${topicId}-contoh-tka-kompleks-A`, label: 'A', text: 'Energi potensial bergantung pada massa, gravitasi, dan ketinggian.', isCorrect: true },
-        { id: `${topicId}-contoh-tka-kompleks-B`, label: 'B', text: 'Energi kinetik selalu nol selama benda bergerak jatuh.', isCorrect: false },
-        { id: `${topicId}-contoh-tka-kompleks-C`, label: 'C', text: 'Energi kinetik bertambah saat kecepatan benda meningkat.', isCorrect: true },
-        { id: `${topicId}-contoh-tka-kompleks-D`, label: 'D', text: 'Energi mekanik tetap jika hambatan udara diabaikan.', isCorrect: true },
-      ],
-    },
-    {
-      id: `${topicId}-contoh-tka-benar-salah`,
-      code: 'CONTOH-TKA-BS',
-      html: '<p>Tentukan benar atau salah untuk setiap pernyataan tentang susunan atom oksigen.</p>',
-      explanation: '<p>Atom oksigen netral memiliki 8 proton dan 8 elektron. Jika nomor massa 16, jumlah neutronnya 8. Susunan elektron oksigen adalah 2 elektron pada kulit K dan 6 elektron pada kulit L.</p>',
-      questionType: 'TRUE_FALSE',
-      scoringMode: 'PARTIAL_NO_PENALTY',
-      maxScore: 1,
-      options: [
-        { id: `${topicId}-contoh-tka-benar-salah-A`, label: 'A', text: 'Atom oksigen netral memiliki 8 elektron.', isCorrect: true },
-        { id: `${topicId}-contoh-tka-benar-salah-B`, label: 'B', text: 'Jika nomor massanya 16, atom oksigen memiliki 7 neutron.', isCorrect: false },
-        { id: `${topicId}-contoh-tka-benar-salah-C`, label: 'C', text: 'Kulit L pada atom oksigen berisi 6 elektron.', isCorrect: true },
-      ],
-    },
-  ];
-}
-
-function withTopicExamples(topicId: string, questions: TopicQuestionPayload[]) {
-  const hasMultipleChoice = questions.some((question) => question.questionType === 'MULTIPLE_CHOICE');
-  const hasTrueFalse = questions.some((question) => question.questionType === 'TRUE_FALSE');
-  const examples = tkaTopicExamples(topicId).filter((question) => {
-    if (question.questionType === 'MULTIPLE_CHOICE') return !hasMultipleChoice;
-    if (question.questionType === 'TRUE_FALSE') return !hasTrueFalse;
-    return false;
-  });
-  return [...questions, ...examples];
-}
 
 export default async function PembahasanPage({ searchParams }: { searchParams: Promise<{ attempt?: string; topik?: string; q?: string }> }) {
   const user = await requireRole(UserRole.SISWA);
@@ -103,8 +48,17 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
       orderBy: [{ orderNo: 'asc' }, { title: 'asc' }],
     });
 
-    const payload = topics.map((topic) => {
-      const questions = withTopicExamples(topic.id, topic.questions.map((question) => ({
+    const visibleTopics = topics.filter((topic) => topic.materials.length > 0 || topic.questions.length > 0);
+    const progress = await loadPracticeProgress(user.id, Object.fromEntries(visibleTopics.map((topic) => [topic.id, topic.questions.map((question) => question.id)])));
+
+    const payload = visibleTopics.map((topic) => ({
+      id: topic.id,
+      title: topic.title,
+      description: topic.description || '',
+      subject: topic.subject,
+      materialCount: topic.materials.length,
+      questionCount: topic.questions.length,
+      questions: topic.questions.map((question) => ({
         id: question.id,
         code: question.code,
         html: question.questionHtml || question.questionText,
@@ -118,17 +72,8 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
           text: option.optionText,
           isCorrect: option.isCorrect,
         })),
-      })));
-      return {
-        id: topic.id,
-        title: topic.title,
-        description: topic.description || '',
-        subject: topic.subject,
-        materialCount: topic.materials.length,
-        questionCount: questions.length,
-        questions,
-      };
-    });
+      })),
+    }));
 
     return (
       <div className="stack">
@@ -137,7 +82,13 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
           title="Pembahasan topik belajar"
           description="Kotak pembahasan muncul setelah siswa mengerjakan semua latihan pada topik belajar. Klik topik selesai untuk melihat jawaban, kunci, skor, dan pembahasan."
         />
-        <TopicExplanation topics={payload} initialQuery={params.q || ''} selectedTopicId={params.topik} />
+        <TopicExplanation
+          topics={payload}
+          initialQuery={params.q || ''}
+          selectedTopicId={params.topik}
+          initialAnswers={progress.answers}
+          initialCompleted={progress.completed}
+        />
       </div>
     );
   }
