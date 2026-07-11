@@ -10,7 +10,7 @@ export default async function StatistikTryoutAdminPage({ searchParams }: { searc
       author: { select: { fullName: true } },
       attempts: {
         where: { submittedAt: { not: null } },
-        select: { score: true },
+        select: { userId: true, score: true },
         orderBy: { submittedAt: 'desc' },
       },
       _count: { select: { questions: true } },
@@ -19,16 +19,19 @@ export default async function StatistikTryoutAdminPage({ searchParams }: { searc
   });
 
   const selected = tryouts.find((item) => item.id === params.tryout) || tryouts[0];
-  const statistics = calculateTryoutStatistics(selected?.attempts.map((attempt) => attempt.score) || []);
+  const selectedAttempts = selected?.attempts || [];
+  const statistics = calculateTryoutStatistics(selectedAttempts.map((attempt) => attempt.score));
+  const participantCount = new Set(selectedAttempts.map((attempt) => attempt.userId)).size;
 
   return (
     <TryoutStatisticsPanel
       eyebrow="Ujian • Statistik Tryout"
       title="Statistik deskriptif seluruh tryout"
-      description="Super Admin dapat membandingkan karakter distribusi skor pada setiap paket tryout tanpa mencampurkan data antartryout."
-      tryouts={tryouts.map((item) => ({ id: item.id, title: item.title, subtitle: `${item.author.fullName} • ${item._count.questions} soal • ${item.attempts.length} attempt` }))}
+      description="Super Admin dapat meninjau seluruh percobaan pada satu paket tryout. Siswa boleh mengulang tryout dan setiap percobaan selesai dihitung sebagai observasi terpisah."
+      tryouts={tryouts.map((item) => ({ id: item.id, title: item.title, subtitle: `${item.author.fullName} • ${item._count.questions} soal • ${item.attempts.length} percobaan` }))}
       selectedTryoutId={selected?.id || ''}
       statistics={statistics}
+      participantCount={participantCount}
     />
   );
 }

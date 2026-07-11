@@ -28,15 +28,18 @@ export default async function StatistikTryoutOrangTuaPage({ searchParams }: { se
   }) : [];
 
   const selected = tryouts.find((item) => item.id === params.tryout) || tryouts[0];
-  const statistics = calculateTryoutStatistics(selected?.attempts.map((attempt) => attempt.score) || []);
-  const childLatest = selected?.attempts.find((attempt) => attempt.userId === child?.id);
+  const selectedAttempts = selected?.attempts || [];
+  const childAttempts = selectedAttempts.filter((attempt) => attempt.userId === child?.id);
+  const childBestScore = childAttempts.length ? Math.max(...childAttempts.map((attempt) => attempt.score)) : 0;
+  const statistics = calculateTryoutStatistics(selectedAttempts.map((attempt) => attempt.score));
+  const participantCount = new Set(selectedAttempts.map((attempt) => attempt.userId)).size;
 
   return (
     <div className="stack">
       <PageHero
         eyebrow="Monitoring • Statistik Tryout"
         title="Pilih anak yang dipantau"
-        description="Setelah memilih anak, statistik tetap disajikan per tryout. Garis vertikal merah menunjukkan nilai percobaan terakhir anak pada tryout terpilih."
+        description="Setelah memilih anak, statistik tetap disajikan per tryout. Anak dapat mengulang tryout dan garis vertikal merah menunjukkan nilai maksimalnya pada tryout terpilih."
       />
       <section className="card stack">
         {links.length ? (
@@ -56,11 +59,13 @@ export default async function StatistikTryoutOrangTuaPage({ searchParams }: { se
         <TryoutStatisticsPanel
           eyebrow="Statistik per tryout"
           title={`Distribusi nilai ${child.fullName}`}
-          description="Distribusi menggunakan seluruh attempt selesai pada tryout terpilih. Penanda individual menggunakan nilai percobaan terakhir anak."
-          tryouts={tryouts.map((item) => ({ id: item.id, title: item.title, subtitle: `${item._count.questions} soal • ${item.attempts.length} attempt selesai` }))}
+          description="Distribusi menggunakan seluruh percobaan selesai pada tryout terpilih. Penanda individual menunjukkan nilai maksimal anak dari seluruh percobaannya."
+          tryouts={tryouts.map((item) => ({ id: item.id, title: item.title, subtitle: `${item._count.questions} soal • ${item.attempts.length} percobaan selesai` }))}
           selectedTryoutId={selected?.id || ''}
           statistics={statistics}
-          marker={childLatest ? { label: `Nilai ${child.fullName}`, score: childLatest.score } : null}
+          participantCount={participantCount}
+          marker={childAttempts.length ? { label: `Nilai maksimal ${child.fullName}`, score: childBestScore } : null}
+          individualSummary={childAttempts.length ? { label: child.fullName, attemptCount: childAttempts.length, bestScore: childBestScore } : null}
           preservedParams={{ child: child.id }}
           emptyTryoutMessage={`${child.fullName} belum menyelesaikan tryout.`}
         />

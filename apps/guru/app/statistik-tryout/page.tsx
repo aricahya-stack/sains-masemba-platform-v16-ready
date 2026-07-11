@@ -10,7 +10,7 @@ export default async function StatistikTryoutGuruPage({ searchParams }: { search
     include: {
       attempts: {
         where: { submittedAt: { not: null } },
-        select: { score: true },
+        select: { userId: true, score: true },
         orderBy: { submittedAt: 'desc' },
       },
       _count: { select: { questions: true } },
@@ -19,16 +19,19 @@ export default async function StatistikTryoutGuruPage({ searchParams }: { search
   });
 
   const selected = tryouts.find((item) => item.id === params.tryout) || tryouts[0];
-  const statistics = calculateTryoutStatistics(selected?.attempts.map((attempt) => attempt.score) || []);
+  const selectedAttempts = selected?.attempts || [];
+  const statistics = calculateTryoutStatistics(selectedAttempts.map((attempt) => attempt.score));
+  const participantCount = new Set(selectedAttempts.map((attempt) => attempt.userId)).size;
 
   return (
     <TryoutStatisticsPanel
       eyebrow="Ujian • Statistik Tryout"
       title="Statistik deskriptif pengerjaan tryout"
-      description="Analisis distribusi skor siswa untuk setiap tryout yang Anda kelola. Pilihan tryout dihitung secara terpisah, bukan digabungkan."
-      tryouts={tryouts.map((item) => ({ id: item.id, title: item.title, subtitle: `${item._count.questions} soal • ${item.attempts.length} attempt selesai` }))}
+      description="Analisis distribusi seluruh percobaan siswa untuk setiap tryout yang Anda kelola. Satu siswa dapat mengulang tryout, tetapi data antartryout tidak pernah digabungkan."
+      tryouts={tryouts.map((item) => ({ id: item.id, title: item.title, subtitle: `${item._count.questions} soal • ${item.attempts.length} percobaan selesai` }))}
       selectedTryoutId={selected?.id || ''}
       statistics={statistics}
+      participantCount={participantCount}
     />
   );
 }

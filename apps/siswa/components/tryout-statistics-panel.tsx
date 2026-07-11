@@ -12,12 +12,18 @@ type Marker = {
   score: number;
 } | null;
 
+type IndividualSummary = {
+  label: string;
+  attemptCount: number;
+  bestScore: number;
+} | null;
+
 function formatNumber(value: number) {
   return Number.isInteger(value) ? String(value) : value.toLocaleString('id-ID', { maximumFractionDigits: 2 });
 }
 
 function markerPosition(score: number) {
-  return `${Math.max(0, Math.min(100, score))}%`;
+  return `${Math.max(1, Math.min(99, score))}%`;
 }
 
 export function TryoutStatisticsPanel({
@@ -27,7 +33,9 @@ export function TryoutStatisticsPanel({
   tryouts,
   selectedTryoutId,
   statistics,
+  participantCount,
   marker,
+  individualSummary,
   preservedParams,
   emptyTryoutMessage = 'Belum ada tryout yang dapat dianalisis.',
 }: {
@@ -37,7 +45,9 @@ export function TryoutStatisticsPanel({
   tryouts: TryoutOption[];
   selectedTryoutId: string;
   statistics: TryoutStatistics;
+  participantCount: number;
   marker?: Marker;
+  individualSummary?: IndividualSummary;
   preservedParams?: Record<string, string>;
   emptyTryoutMessage?: string;
 }) {
@@ -78,14 +88,46 @@ export function TryoutStatisticsPanel({
               <div>
                 <div className="eyebrow">Distribusi frekuensi</div>
                 <strong>{selectedTryout.title}</strong>
-                <p className="muted">{statistics.count} attempt selesai menjadi observasi. Skor menggunakan skala 0–100.</p>
+                <p className="muted">Setiap percobaan yang sudah selesai dihitung sebagai satu observasi pada skala nilai 0–100.</p>
               </div>
               {marker ? <span className="marker-legend"><i /> {marker.label}: {formatNumber(marker.score)}</span> : null}
             </div>
 
+            <div className="histogram-summary-grid" aria-label="Ringkasan pengerjaan tryout">
+              <div className="histogram-summary-item">
+                <span>Total percobaan</span>
+                <strong>{statistics.count}</strong>
+                <small>Seluruh pengerjaan selesai</small>
+              </div>
+              <div className="histogram-summary-item">
+                <span>Siswa peserta</span>
+                <strong>{participantCount}</strong>
+                <small>Jumlah siswa unik</small>
+              </div>
+              <div className="histogram-summary-item">
+                <span>Nilai tertinggi</span>
+                <strong>{formatNumber(statistics.maximum)}</strong>
+                <small>Dari seluruh percobaan</small>
+              </div>
+              {individualSummary ? (
+                <>
+                  <div className="histogram-summary-item is-personal">
+                    <span>Percobaan {individualSummary.label}</span>
+                    <strong>{individualSummary.attemptCount}</strong>
+                    <small>Dapat mengulang tryout</small>
+                  </div>
+                  <div className="histogram-summary-item is-personal">
+                    <span>Nilai maksimal {individualSummary.label}</span>
+                    <strong>{formatNumber(individualSummary.bestScore)}</strong>
+                    <small>Ditandai garis merah</small>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
             {statistics.count ? (
               <div className="histogram-shell">
-                <div className="histogram-y-label">Frekuensi</div>
+                <div className="histogram-y-label">Frekuensi percobaan</div>
                 <div className="histogram-plot" role="img" aria-label={`Diagram batang distribusi skor ${selectedTryout.title}`}>
                   <div className="histogram-gridline gridline-25" />
                   <div className="histogram-gridline gridline-50" />
@@ -97,7 +139,7 @@ export function TryoutStatisticsPanel({
                       <div
                         className={`histogram-bar histogram-bar-${bin.index + 1}`}
                         style={{ height: `${Math.max(bin.frequency ? 7 : 0, (bin.frequency / maxFrequency) * 100)}%` }}
-                        title={`${bin.label}: ${bin.frequency} siswa (${formatNumber(bin.percentage)}%)`}
+                        title={`${bin.label}: ${bin.frequency} percobaan (${formatNumber(bin.percentage)}%)`}
                       />
                       <div className="histogram-label">{bin.label}</div>
                     </div>
@@ -110,7 +152,7 @@ export function TryoutStatisticsPanel({
                 </div>
                 <div className="histogram-x-label">Interval nilai</div>
               </div>
-            ) : <div className="empty-state">Belum ada attempt yang selesai pada tryout ini.</div>}
+            ) : <div className="empty-state">Belum ada percobaan yang selesai pada tryout ini.</div>}
           </section>
 
           <section className="card stack">
@@ -118,9 +160,13 @@ export function TryoutStatisticsPanel({
               <div className="eyebrow">Tabel distribusi frekuensi</div>
               <strong>Dasar pembentukan diagram batang</strong>
             </div>
+            <div className="statistics-observation-note" role="note">
+              <strong>Catatan observasi</strong>
+              <p>Setiap siswa dapat mengerjakan tryout berulang kali. Karena itu, frekuensi pada tabel menunjukkan jumlah percobaan selesai, bukan jumlah siswa unik. Seluruh percobaan tetap dihitung hanya pada tryout yang sedang dipilih.</p>
+            </div>
             <div className="table-responsive">
               <table className="data-table statistics-table">
-                <thead><tr><th>Interval nilai</th><th>Frekuensi</th><th>Persentase</th><th>Frekuensi kumulatif</th></tr></thead>
+                <thead><tr><th>Interval nilai</th><th>Frekuensi percobaan</th><th>Persentase</th><th>Frekuensi kumulatif</th></tr></thead>
                 <tbody>
                   {statistics.bins.map((bin, index) => {
                     const cumulative = statistics.bins.slice(0, index + 1).reduce((sum, item) => sum + item.frequency, 0);
@@ -173,7 +219,7 @@ export function TryoutStatisticsPanel({
 
           <section className="card stats-method-note">
             <strong>Catatan perhitungan</strong>
-            <p className="muted">Varian dan standar deviasi dihitung sebagai ukuran populasi dari seluruh attempt selesai pada tryout terpilih. Q1, Q2, dan Q3 memakai interpolasi posisi. Kurtosis ditampilkan sebagai excess kurtosis: nilai sekitar 0 berarti mendekati distribusi normal.</p>
+            <p className="muted">Varian dan standar deviasi dihitung sebagai ukuran populasi dari seluruh percobaan selesai pada tryout terpilih. Q1, Q2, dan Q3 memakai interpolasi posisi. Kurtosis ditampilkan sebagai excess kurtosis: nilai sekitar 0 berarti mendekati distribusi normal.</p>
           </section>
         </>
       ) : null}

@@ -19,18 +19,23 @@ export default async function StatistikTryoutSiswaPage({ searchParams }: { searc
   });
 
   const selected = tryouts.find((item) => item.id === params.tryout) || tryouts[0];
-  const statistics = calculateTryoutStatistics(selected?.attempts.map((attempt) => attempt.score) || []);
-  const ownLatest = selected?.attempts.find((attempt) => attempt.userId === user.id);
+  const selectedAttempts = selected?.attempts || [];
+  const ownAttempts = selectedAttempts.filter((attempt) => attempt.userId === user.id);
+  const ownBestScore = ownAttempts.length ? Math.max(...ownAttempts.map((attempt) => attempt.score)) : 0;
+  const statistics = calculateTryoutStatistics(selectedAttempts.map((attempt) => attempt.score));
+  const participantCount = new Set(selectedAttempts.map((attempt) => attempt.userId)).size;
 
   return (
     <TryoutStatisticsPanel
       eyebrow="Ujian • Statistik Tryout"
       title="Posisi nilai Anda dalam distribusi tryout"
-      description="Diagram menunjukkan distribusi seluruh attempt selesai pada tryout terpilih. Garis vertikal merah menunjukkan nilai dari percobaan terakhir Anda pada tryout tersebut."
-      tryouts={tryouts.map((item) => ({ id: item.id, title: item.title, subtitle: `${item._count.questions} soal • ${item.attempts.length} attempt selesai` }))}
+      description="Diagram menunjukkan seluruh percobaan selesai pada tryout terpilih. Anda dapat mengulang tryout; garis vertikal merah menunjukkan nilai maksimal yang pernah Anda peroleh pada tryout tersebut."
+      tryouts={tryouts.map((item) => ({ id: item.id, title: item.title, subtitle: `${item._count.questions} soal • ${item.attempts.length} percobaan selesai` }))}
       selectedTryoutId={selected?.id || ''}
       statistics={statistics}
-      marker={ownLatest ? { label: 'Nilai Anda', score: ownLatest.score } : null}
+      participantCount={participantCount}
+      marker={ownAttempts.length ? { label: 'Nilai maksimal Anda', score: ownBestScore } : null}
+      individualSummary={ownAttempts.length ? { label: 'Anda', attemptCount: ownAttempts.length, bestScore: ownBestScore } : null}
       emptyTryoutMessage="Anda belum menyelesaikan tryout sehingga statistik individual belum tersedia."
     />
   );
