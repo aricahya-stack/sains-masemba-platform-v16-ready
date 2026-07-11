@@ -7,7 +7,13 @@ import {
   TryoutStatus,
   UserRole,
 } from '@sh/db';
-import { slugify, splitLines, toDateOrNull, toFloat, toInt } from './utils';
+import { splitLines, toDateOrNull, toFloat, toInt } from './utils';
+import {
+  makeInternalTryoutTopicSlug,
+  normalizeTopicCode,
+  normalizeTryoutCode,
+  toTryoutPeriodCode,
+} from './content-scope';
 
 export type ImportKind = 'MATERIAL' | 'BLUEPRINT' | 'QUESTION' | 'TRYOUT_CONTENT' | 'TRYOUT' | 'USER' | 'PARENT_LINK';
 export type ImportRow = Record<string, unknown>;
@@ -135,7 +141,7 @@ async function importMaterials(rows: ImportRow[], actor: ImportActor): Promise<I
     const topicTitle = text(row.topicTitle);
     const materialTitle = text(row.materialTitle);
     if (!topicTitle || !materialTitle) throw new Error('Setiap baris materi wajib memiliki topicTitle dan materialTitle.');
-    const topicSlug = text(row.topicSlug) || slugify(topicTitle);
+    const topicSlug = normalizeTopicCode(row.kode_topik || row.topicCode || row.topicSlug, topicTitle);
     const key = `${topicSlug}::${materialTitle.toLowerCase()}`;
     const group = groups.get(key) || { first: row, rows: [] };
     group.rows.push(row);
@@ -155,7 +161,7 @@ async function importMaterials(rows: ImportRow[], actor: ImportActor): Promise<I
   await prisma.$transaction(async (tx) => {
     for (const { first, rows: groupRows } of groups.values()) {
       const topicTitle = text(first.topicTitle);
-      const topicSlug = text(first.topicSlug) || slugify(topicTitle);
+      const topicSlug = normalizeTopicCode(first.kode_topik || first.topicCode || first.topicSlug, topicTitle);
       const existingTopic = await tx.topic.findUnique({ where: { slug: topicSlug } });
       const topic = existingTopic
         ? await tx.topic.update({
@@ -302,7 +308,7 @@ async function importQuestions(rows: ImportRow[], actor: ImportActor): Promise<I
         throw new Error(`Baris ${index + 1}: kode_soal, topik, dan pertanyaan_html wajib diisi.`);
       }
 
-      const topicSlug = slugify(topicTitle);
+      const topicSlug = normalizeTopicCode(row.kode_topik || row.topicCode, topicTitle);
       let topicId = topicCache.get(topicSlug);
       if (!topicId) {
         let topic = await tx.topic.findUnique({ where: { slug: topicSlug } });
@@ -364,37 +370,68 @@ async function importQuestions(rows: ImportRow[], actor: ImportActor): Promise<I
 
 
 async function importTryoutContent(rows: ImportRow[], actor: ImportActor): Promise<ImportResult> {
-  const groupCounts = new Map<string, number>();
-  const seenCodes = new Set<string>();
+  const groups = new Map<string, { name: string; count: number }>();
+  const seenQuestionCodes = new Set<string>();
+
   for (const row of rows) {
     const groupName = text(row.nama_tryout);
+    const tryoutCode = normalizeTryoutCode(row.kode_tryout || row.tryoutCode, groupName);
     const questionCode = text(row.kode_soal);
+
     if (!groupName) throw new Error('Setiap baris tryout wajib memiliki nama_tryout.');
     if (!questionCode) throw new Error('Setiap baris tryout wajib memiliki kode_soal.');
-    if (seenCodes.has(questionCode)) throw new Error(`Kode soal ${questionCode} duplikat dalam file tryout.`);
-    seenCodes.add(questionCode);
-    groupCounts.set(groupName, (groupCounts.get(groupName) || 0) + 1);
+    if (seenQuestionCodes.has(questionCode)) throw new Error(`Kode soal ${questionCode} duplikat dalam file tryout.`);
+    seenQuestionCodes.add(questionCode);
+
+    const current = groups.get(tryoutCode);
+    if (current && current.name.toLowerCase() !== groupName.toLowerCase()) {
+      throw new Error(`Kode tryout ${tryoutCode} dipakai oleh dua nama paket berbeda: "${current.name}" dan "${groupName}".`);
+    }
+    groups.set(tryoutCode, { name: current?.name || groupName, count: (current?.count || 0) + 1 });
   }
-  for (const [groupName, count] of groupCounts) {
-    if (count !== 30) throw new Error(`Paket ${groupName} harus berisi tepat 30 soal. File ini berisi ${count} soal.`);
+
+  for (const [tryoutCode, group] of groups) {
+    if (group.count !== 30) {
+      throw new Error(`Paket ${group.name} (${tryoutCode}) harus berisi tepat 30 soal. File ini berisi ${group.count} soal.`);
+    }
   }
 
   const result: ImportResult = {
-    kind: 'TRYOUT_CONTENT', processedRows: rows.length, created: 0, updated: 0, linked: 0, warnings: [],
-    details: { blueprintsCreated: 0, blueprintsUpdated: 0, questionsCreated: 0, questionsUpdated: 0, options: 0, topicsCreated: 0, tryoutGroups: groupCounts.size },
+    kind: 'TRYOUT_CONTENT',
+    processedRows: rows.length,
+    created: 0,
+    updated: 0,
+    linked: 0,
+    warnings: [],
+    details: {
+      blueprintsCreated: 0,
+      blueprintsUpdated: 0,
+      questionsCreated: 0,
+      questionsUpdated: 0,
+      options: 0,
+      topicsCreated: 0,
+      legacyTopicsCleaned: 0,
+      tryoutGroups: groups.size,
+      tryoutCodes: groups.size,
+    },
   };
 
   await prisma.$transaction(async (tx) => {
     const topicCache = new Map<string, string>();
+    const legacyTopicIds = new Set<string>();
+
     for (let index = 0; index < rows.length; index += 1) {
       const row = rows[index];
       const groupName = text(row.nama_tryout);
+      const tryoutCode = normalizeTryoutCode(row.kode_tryout || row.tryoutCode, groupName);
       const blueprintCode = text(row.kode_kisi_kisi);
       const competency = text(row.kompetensi);
       const indicator = text(row.indikator);
       const questionCode = text(row.kode_soal);
       const topicTitle = text(row.topik);
+      const topicCode = normalizeTopicCode(row.kode_topik || row.topicCode, topicTitle);
       const promptHtml = text(row.pertanyaan_html);
+
       if (!blueprintCode || !competency || !indicator) {
         throw new Error(`Baris ${index + 1}: kode_kisi_kisi, kompetensi, dan indikator wajib diisi.`);
       }
@@ -402,21 +439,34 @@ async function importTryoutContent(rows: ImportRow[], actor: ImportActor): Promi
         throw new Error(`Baris ${index + 1}: kode_soal, topik, dan pertanyaan_html wajib diisi.`);
       }
 
-      const topicSlug = slugify(topicTitle);
-      let topicId = topicCache.get(topicSlug);
+      // PENTING: soal tryout memakai namespace topik internal tersendiri.
+      // Dengan demikian import tryout tidak pernah menambah/mengotori daftar topik belajar siswa.
+      const internalTopicSlug = makeInternalTryoutTopicSlug(tryoutCode, topicCode, topicTitle);
+      let topicId = topicCache.get(internalTopicSlug);
       if (!topicId) {
-        let topic = await tx.topic.findUnique({ where: { slug: topicSlug } });
+        let topic = await tx.topic.findUnique({ where: { slug: internalTopicSlug } });
         if (!topic) {
-          topic = await tx.topic.create({ data: { title: topicTitle, slug: topicSlug, subject: 'IPA SMP' } });
+          topic = await tx.topic.create({
+            data: {
+              title: topicTitle,
+              slug: internalTopicSlug,
+              subject: 'IPA SMP',
+              description: `Topik internal untuk ${groupName} (${tryoutCode}). Tidak ditampilkan sebagai materi siswa.`,
+            },
+          });
           result.details.topicsCreated += 1;
         }
         topicId = topic.id;
-        topicCache.set(topicSlug, topic.id);
+        topicCache.set(internalTopicSlug, topic.id);
       }
 
       const existingBlueprint = await tx.blueprint.findUnique({ where: { code: blueprintCode } });
+      if (existingBlueprint?.topicId && existingBlueprint.topicId !== topicId) {
+        legacyTopicIds.add(existingBlueprint.topicId);
+      }
+
       const blueprintData = {
-        periodCode: 'TRYOUT_CONTENT',
+        periodCode: toTryoutPeriodCode(tryoutCode, groupName),
         periodName: groupName,
         testGroup: groupName,
         topicId,
@@ -428,9 +478,11 @@ async function importTryoutContent(rows: ImportRow[], actor: ImportActor): Promi
         targetQuestionCount: Math.max(1, toInt(row.target_jumlah_soal, 1)),
         blueprintText: text(row.catatan_kisi_kisi) || null,
       };
+
       const blueprint = existingBlueprint
         ? await tx.blueprint.update({ where: { id: existingBlueprint.id }, data: blueprintData })
         : await tx.blueprint.create({ data: { code: blueprintCode, ...blueprintData } });
+
       if (existingBlueprint) result.details.blueprintsUpdated += 1;
       else result.details.blueprintsCreated += 1;
 
@@ -439,11 +491,15 @@ async function importTryoutContent(rows: ImportRow[], actor: ImportActor): Promi
       const stimulusHtml = text(row.stimulus_html);
       const questionHtml = [stimulusHtml, promptHtml].filter(Boolean).join('\n');
       const existingQuestion = await tx.question.findUnique({ where: { code: questionCode } });
+
       if (existingQuestion && actor.role !== UserRole.SUPER_ADMIN && existingQuestion.authorId !== actor.id) {
         throw new Error(`Kode soal ${questionCode} sudah dimiliki guru lain dan tidak dapat ditimpa.`);
       }
       if (existingQuestion && !existingQuestion.blueprintId) {
         throw new Error(`Kode soal ${questionCode} sudah digunakan sebagai soal latihan. Gunakan kode lain untuk tryout.`);
+      }
+      if (existingQuestion?.topicId && existingQuestion.topicId !== topicId) {
+        legacyTopicIds.add(existingQuestion.topicId);
       }
 
       const questionData = {
@@ -463,6 +519,7 @@ async function importTryoutContent(rows: ImportRow[], actor: ImportActor): Promi
       const question = existingQuestion
         ? await tx.question.update({ where: { id: existingQuestion.id }, data: questionData })
         : await tx.question.create({ data: { code: questionCode, authorId: actor.id, ...questionData } });
+
       if (existingQuestion) {
         result.updated += 1;
         result.details.questionsUpdated += 1;
@@ -471,9 +528,25 @@ async function importTryoutContent(rows: ImportRow[], actor: ImportActor): Promi
         result.created += 1;
         result.details.questionsCreated += 1;
       }
-      await tx.questionOption.createMany({ data: options.map((option) => ({ questionId: question.id, ...option })) });
+
+      await tx.questionOption.createMany({
+        data: options.map((option) => ({ questionId: question.id, ...option })),
+      });
       result.details.options += options.length;
       result.linked += 1;
+    }
+
+    // Bersihkan topik lama yang dulu tercipta hanya karena import tryout,
+    // tetapi jangan pernah menghapus topik yang masih dipakai materi/latihan lain.
+    for (const topicId of legacyTopicIds) {
+      const usage = await tx.topic.findUnique({
+        where: { id: topicId },
+        select: { _count: { select: { materials: true, questions: true, blueprints: true } } },
+      });
+      if (usage && usage._count.materials + usage._count.questions + usage._count.blueprints === 0) {
+        await tx.topic.delete({ where: { id: topicId } });
+        result.details.legacyTopicsCleaned += 1;
+      }
     }
   }, { timeout: 60000 });
 

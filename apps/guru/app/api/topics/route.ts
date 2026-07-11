@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma, UserRole } from '@sh/db';
-import { getCurrentUser, slugify, toInt } from '@sh/core';
+import { getCurrentUser, isInternalTryoutTopicSlug, normalizeTopicCode, toInt } from '@sh/core';
 
 async function ensureTeacher() {
   const user = await getCurrentUser();
@@ -19,6 +19,7 @@ function serialize(topic: {
     id: topic.id,
     title: topic.title,
     slug: topic.slug,
+    code: topic.slug,
     subject: topic.subject,
     description: topic.description || '',
     orderNo: String(topic.orderNo),
@@ -27,9 +28,11 @@ function serialize(topic: {
 
 function topicData(body: Record<string, unknown>) {
   const title = String(body.title || '').trim();
+  const slug = normalizeTopicCode(body.code || body.slug, title);
+  if (isInternalTryoutTopicSlug(slug)) throw new Error('Prefix __tryout__- dicadangkan untuk topik internal tryout.');
   return {
     title,
-    slug: slugify(title),
+    slug,
     subject: String(body.subject || 'IPA SMP').trim() || 'IPA SMP',
     description: body.description ? String(body.description) : null,
     orderNo: toInt(body.orderNo, 0),

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma, TryoutStatus, UserRole } from '@sh/db';
-import { getCurrentUser, splitLines, toDateOrNull, toInt } from '@sh/core';
+import { getCurrentUser, normalizeTryoutCode, splitLines, toDateOrNull, toInt, tryoutCodeFromPeriodCode } from '@sh/core';
 
 async function ensureAdmin() {
   const user = await getCurrentUser();
@@ -17,6 +17,12 @@ async function resolveAuthorId(value: unknown, fallbackId: string) {
   return author.id;
 }
 
+type ResolvedTryoutQuestion = {
+  id: string;
+  code: string;
+  blueprint: { periodCode: string | null; testGroup: string | null } | null;
+};
+
 function normalizeTryoutStatus(value: unknown): TryoutStatus {
   return value === TryoutStatus.SCHEDULED ||
     value === TryoutStatus.OPEN ||
@@ -30,15 +36,18 @@ function normalizeTryoutStatus(value: unknown): TryoutStatus {
 async function serialize(tryoutId: string, sourceGroup?: string) {
   const item = await prisma.tryout.findUniqueOrThrow({
     where: { id: tryoutId },
-    include: { author: true, questions: { include: { question: true }, orderBy: { orderNo: 'asc' } } },
+    include: { author: true, questions: { include: { question: { include: { blueprint: true } } }, orderBy: { orderNo: 'asc' } } },
   });
+  const firstBlueprint = item.questions.map((row) => row.question.blueprint).find(Boolean);
+  const tryoutCode = tryoutCodeFromPeriodCode(firstBlueprint?.periodCode, firstBlueprint?.testGroup || sourceGroup || item.title);
   return {
     id: item.id,
     _persisted: 'true',
+    tryoutCode,
     authorId: item.authorId,
     authorLabel: item.author.fullName,
-    sourceGroup: sourceGroup || item.title,
-    importedGroup: `${item.authorId}::${sourceGroup || item.title}`,
+    sourceGroup: sourceGroup || firstBlueprint?.testGroup || item.title,
+    importedGroup: `${item.authorId}::${tryoutCode}`,
     title: item.title,
     description: item.description || '',
     durationMinutes: String(item.durationMinutes),
@@ -52,13 +61,18 @@ async function serialize(tryoutId: string, sourceGroup?: string) {
   };
 }
 
-async function resolveQuestions(authorId: string, questionCodesText: string, requireThirty: boolean) {
+async function resolveQuestions(
+  authorId: string,
+  questionCodesText: string,
+  requireThirty: boolean,
+  expectedTryoutCode = '',
+) {
   const codes = splitLines(questionCodesText.replace(/,/g, '\n'));
   if (requireThirty && codes.length !== 30) {
     throw new Error(`Paket tryout wajib berisi tepat 30 kode soal. Saat ini terdapat ${codes.length} kode.`);
   }
   if (new Set(codes).size !== codes.length) throw new Error('Kode soal tryout tidak boleh duplikat dalam satu paket.');
-  if (!codes.length) return [] as Array<{ id: string; code: string }>;
+  if (!codes.length) return [] as ResolvedTryoutQuestion[];
 
   const questions = await prisma.question.findMany({
     where: {
@@ -68,15 +82,33 @@ async function resolveQuestions(authorId: string, questionCodesText: string, req
         { tryoutQuestions: { some: { tryout: { authorId } } } },
       ],
     },
-    select: { id: true, code: true },
-  }) as Array<{ id: string; code: string }>;
-  const byCode = new Map(questions.map((question) => [question.code, question]));
+    select: {
+      id: true,
+      code: true,
+      blueprint: { select: { periodCode: true, testGroup: true } },
+    },
+  });
+
+  const typedQuestions = questions as ResolvedTryoutQuestion[];
+  const byCode = new Map(typedQuestions.map((question) => [question.code, question]));
   const missing = codes.filter((code) => !byCode.has(code));
   if (missing.length) {
     throw new Error(`Soal tryout berikut tidak ditemukan atau bukan milik pemilik paket: ${missing.slice(0, 5).join(', ')}${missing.length > 5 ? ', ...' : ''}`);
   }
+
   const ordered = codes.map((code) => byCode.get(code)!);
   if (requireThirty && ordered.length !== 30) throw new Error('Paket tryout wajib berisi tepat 30 soal yang valid.');
+
+  if (requireThirty && expectedTryoutCode) {
+    const normalizedExpected = normalizeTryoutCode(expectedTryoutCode);
+    const mismatched = ordered.filter((question) =>
+      tryoutCodeFromPeriodCode(question.blueprint?.periodCode, question.blueprint?.testGroup || '') !== normalizedExpected,
+    );
+    if (mismatched.length) {
+      throw new Error(`Mapping ditolak: ${mismatched.length} soal tidak berasal dari kode tryout ${normalizedExpected}. Periksa kode_tryout pada file import.`);
+    }
+  }
+
   return ordered;
 }
 
@@ -104,7 +136,7 @@ export async function POST(request: Request) {
     const data = tryoutData(body);
     if (!data.title) throw new Error('Judul tryout wajib diisi.');
     const requireThirty = true;
-    const questions = await resolveQuestions(authorId, String(body.questionCodes || ''), requireThirty);
+    const questions = await resolveQuestions(authorId, String(body.questionCodes || ''), requireThirty, String(body.tryoutCode || body.sourceGroup || ''));
     const item = await prisma.$transaction(async (tx) => {
       const created = await tx.tryout.create({ data: { authorId, ...data } });
       if (questions.length) {
@@ -133,7 +165,7 @@ export async function PUT(request: Request) {
     const data = tryoutData(body);
     if (!data.title) throw new Error('Judul tryout wajib diisi.');
     const requireThirty = true;
-    const questions = await resolveQuestions(authorId, String(body.questionCodes || ''), requireThirty);
+    const questions = await resolveQuestions(authorId, String(body.questionCodes || ''), requireThirty, String(body.tryoutCode || body.sourceGroup || ''));
     await prisma.$transaction(async (tx) => {
       await tx.tryout.update({ where: { id: tryoutId }, data: { ...data, authorId } });
       await tx.tryoutQuestion.deleteMany({ where: { tryoutId } });

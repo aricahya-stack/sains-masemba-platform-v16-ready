@@ -80,7 +80,7 @@ export default async function BelajarPage({ searchParams }: { searchParams: Prom
             blueprint: {
               is: {
                 OR: [
-                  { periodCode: 'TRYOUT_CONTENT' },
+                  { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
                   { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
                 ],
               },
@@ -95,7 +95,11 @@ export default async function BelajarPage({ searchParams }: { searchParams: Prom
     orderBy: [{ orderNo: 'asc' }, { title: 'asc' }],
   });
 
-  const payload = topics.map((topic) => {
+  // Hanya topik yang benar-benar memiliki materi terbit atau soal latihan terbit yang tampil.
+  // Ini sekaligus menyembunyikan topik legacy yang dulu tercipta akibat import tryout.
+  const visibleTopics = topics.filter((topic) => topic.materials.length > 0 || topic.questions.length > 0);
+
+  const payload = visibleTopics.map((topic) => {
     const questions = withTopicExamples(topic.id, topic.questions.map((question) => ({
       id: question.id,
       code: question.code,

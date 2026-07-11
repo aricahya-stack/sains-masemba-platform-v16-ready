@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma, PublishStatus, UserRole } from '@sh/db';
-import { getCurrentUser, slugify, toInt } from '@sh/core';
+import { getCurrentUser, isInternalTryoutTopicSlug, normalizeTopicCode, toInt } from '@sh/core';
 
 async function ensureAdmin() {
   const user = await getCurrentUser();
@@ -93,6 +93,7 @@ async function serialize(materialId: string) {
     _persisted: 'true',
     topicId: material.topicId,
     materialId: material.id,
+    topicCode: material.topic.slug,
     topicTitle: material.topic.title,
     subject: material.topic.subject,
     orderNo: String(material.topic.orderNo),
@@ -117,6 +118,7 @@ async function serializeTopicOnly(topicId: string) {
     _persisted: 'true',
     topicId: topic.id,
     materialId: '',
+    topicCode: topic.slug,
     topicTitle: topic.title,
     subject: topic.subject,
     orderNo: String(topic.orderNo),
@@ -136,7 +138,9 @@ async function serializeTopicOnly(topicId: string) {
 async function upsertTopic(db: any, body: Record<string, unknown>, existingTopicId?: string) {
   const title = String(body.topicTitle || '').trim();
   if (!title) throw new Error('Nama topik wajib diisi.');
-  const slug = slugify(title);
+  const slug = normalizeTopicCode(body.topicCode || body.topicSlug, title);
+  if (!slug) throw new Error('Kode topik wajib valid.');
+  if (isInternalTryoutTopicSlug(slug)) throw new Error('Prefix __tryout__- dicadangkan untuk topik internal tryout. Gunakan kode topik lain.');
   const data = {
     title,
     slug,

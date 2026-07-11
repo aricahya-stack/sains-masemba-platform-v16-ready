@@ -13,7 +13,7 @@ export default async function LatihanPage() {
           blueprint: {
             is: {
               OR: [
-                { periodCode: 'TRYOUT_CONTENT' },
+                { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
                 { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
               ],
             },

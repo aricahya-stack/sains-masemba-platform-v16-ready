@@ -23,7 +23,7 @@ export default async function Page() {
           blueprint: {
             is: {
               OR: [
-                { periodCode: 'TRYOUT_CONTENT' },
+                { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
                 { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
               ],
             },
@@ -37,7 +37,7 @@ export default async function Page() {
             blueprint: {
               is: {
                 OR: [
-                  { periodCode: 'TRYOUT_CONTENT' },
+                  { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
                   { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
                 ],
               },

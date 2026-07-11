@@ -88,7 +88,7 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
             blueprint: {
               is: {
                 OR: [
-                  { periodCode: 'TRYOUT_CONTENT' },
+                  { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
                   { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
                 ],
               },

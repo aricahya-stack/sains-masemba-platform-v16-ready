@@ -1,6 +1,12 @@
 import { prisma, UserRole } from '@sh/db';
-import { requireRole } from '@sh/core';
+import { requireRole, tryoutCodeFromPeriodCode } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
+
+type MappingGroup = {
+  tryoutCode: string;
+  groupName: string;
+  questionCodes: string[];
+};
 
 export default async function MappingTryoutPage() {
   const user = await requireRole(UserRole.GURU);
@@ -11,7 +17,7 @@ export default async function MappingTryoutPage() {
         blueprint: {
           is: {
             OR: [
-              { periodCode: 'TRYOUT_CONTENT' },
+              { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
               { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
             ],
           },
@@ -22,24 +28,45 @@ export default async function MappingTryoutPage() {
     }),
     prisma.tryout.findMany({
       where: { authorId: user.id },
-      include: { questions: { include: { question: true }, orderBy: { orderNo: 'asc' } } },
+      include: {
+        questions: {
+          include: { question: { include: { blueprint: true } } },
+          orderBy: { orderNo: 'asc' },
+        },
+      },
       orderBy: { title: 'asc' },
     }),
   ]);
 
-  const groups = new Map<string, string[]>();
-  for (const tryout of tryouts) {
-    groups.set(tryout.title, tryout.questions.map((row) => row.question.code));
-  }
+  const groups = new Map<string, MappingGroup>();
+
+  // Sumber utama mapping adalah soal hasil import terbaru.
+  // Dengan urutan ini, re-import paket yang sama tidak menggabungkan 30 soal lama
+  // dengan 30 soal baru menjadi 31+ soal.
   for (const question of questions) {
     const groupName = question.blueprint?.testGroup?.trim();
     if (!groupName) continue;
-    const current = groups.get(groupName) || [];
-    if (!current.includes(question.code)) current.push(question.code);
-    groups.set(groupName, current);
+    const tryoutCode = tryoutCodeFromPeriodCode(question.blueprint?.periodCode, groupName);
+    const current = groups.get(tryoutCode) || { tryoutCode, groupName, questionCodes: [] };
+    if (!current.questionCodes.includes(question.code)) current.questionCodes.push(question.code);
+    groups.set(tryoutCode, current);
+  }
+
+  // Paket lama yang belum lagi memiliki sumber soal import tetap ditampilkan,
+  // tetapi tidak menimpa isi paket import terbaru dengan kode yang sama.
+  for (const tryout of tryouts) {
+    const firstBlueprint = tryout.questions.map((row) => row.question.blueprint).find(Boolean);
+    const tryoutCode = tryoutCodeFromPeriodCode(firstBlueprint?.periodCode, firstBlueprint?.testGroup || tryout.title);
+    if (groups.has(tryoutCode)) continue;
+    groups.set(tryoutCode, {
+      tryoutCode,
+      groupName: firstBlueprint?.testGroup?.trim() || tryout.title,
+      questionCodes: tryout.questions.map((row) => row.question.code),
+    });
   }
 
   const fields: InlineFieldDef[] = [
+    { name: 'tryoutCode', label: 'Kode tryout', readOnly: true },
     { name: 'sourceGroup', label: 'Sumber data tryout', readOnly: true },
     { name: 'title', label: 'Judul tryout untuk siswa' },
     { name: 'description', label: 'Deskripsi', type: 'richtext', full: true },
@@ -50,18 +77,21 @@ export default async function MappingTryoutPage() {
     { name: 'rulesHtml', label: 'Aturan ujian', type: 'richtext', full: true },
   ];
 
-  const initialRows = Array.from(groups.entries()).map(([groupName, questionCodes]) => {
+  const initialRows = Array.from(groups.values()).map(({ tryoutCode, groupName, questionCodes }) => {
     const expectedCodes = [...questionCodes].sort().join('|');
     const existing = tryouts.find((tryout) => {
-      if (tryout.title === groupName) return true;
+      const firstBlueprint = tryout.questions.map((row) => row.question.blueprint).find(Boolean);
+      const existingTryoutCode = tryoutCodeFromPeriodCode(firstBlueprint?.periodCode, firstBlueprint?.testGroup || tryout.title);
       const mappedCodes = tryout.questions.map((row) => row.question.code).sort().join('|');
-      return mappedCodes === expectedCodes;
+      return existingTryoutCode === tryoutCode || mappedCodes === expectedCodes;
     });
+
     return {
-      id: existing?.id || `group:${encodeURIComponent(groupName)}`,
+      id: existing?.id || `group:${encodeURIComponent(tryoutCode)}`,
       _persisted: existing ? 'true' : 'false',
+      tryoutCode,
       sourceGroup: groupName,
-      importedGroup: groupName,
+      importedGroup: tryoutCode,
       title: existing?.title || groupName,
       description: existing?.description || '',
       durationMinutes: String(existing?.durationMinutes || 60),
@@ -79,7 +109,7 @@ export default async function MappingTryoutPage() {
     <InlineEditableManager
       eyebrow="Ujian • Mapping Tryout"
       title="Mapping dan penjadwalan tryout"
-      description="Paket tryout hasil impor maupun Tryout lama dipetakan dan dijadwalkan di halaman ini, bukan melalui Excel. Hanya paket dengan tepat 30 soal yang dapat disimpan sebagai jadwal tryout."
+      description="Paket kini dikelompokkan berdasarkan kode tryout, bukan nama topik atau nama materi. Konten tryout tetap terpisah dari topik belajar siswa dan hanya paket berisi tepat 30 soal yang dapat dijadwalkan."
       entityName="jadwal tryout"
       endpoint="/api/tryouts"
       fields={fields}
@@ -87,6 +117,7 @@ export default async function MappingTryoutPage() {
       allowAdd={false}
       tableTitle="Tabel mapping dan jadwal tryout"
       tableColumns={[
+        { key: 'tryoutCode', label: 'Kode tryout' },
         { key: 'sourceGroup', label: 'Paket impor' },
         { key: 'questionCount', label: 'Jumlah soal' },
         { key: 'mappingStatus', label: 'Kesiapan' },

@@ -1,6 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma, PublishStatus, QuestionType, ScoringMode, UserRole } from '@sh/db';
-import { getCurrentUser, toFloat, toInt } from '@sh/core';
+import {
+  getCurrentUser,
+  isInternalTryoutTopicSlug,
+  makeInternalTryoutTopicSlug,
+  normalizeTryoutCode,
+  toFloat,
+  toInt,
+  toTryoutPeriodCode,
+  tryoutCodeFromPeriodCode,
+} from '@sh/core';
 
 async function ensureTeacher() {
   const user = await getCurrentUser();
@@ -112,6 +121,7 @@ async function serialize(questionId: string) {
     id: question.id,
     _persisted: 'true',
     testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
+    tryoutCode: tryoutCodeFromPeriodCode(blueprint?.periodCode, blueprint?.testGroup || mappedTryout?.title || 'Tryout'),
     blueprintId: blueprint?.id || '',
     blueprintCode: blueprint?.code || `LEGACY-${question.code}`,
     competency: blueprint?.competency || 'Kompetensi belum dicatat pada data lama',
@@ -141,13 +151,14 @@ async function serialize(questionId: string) {
   };
 }
 
-function blueprintData(body: Record<string, unknown>) {
+function blueprintData(body: Record<string, unknown>, topicId: string) {
   const testGroup = String(body.testGroup || '').trim();
+  const tryoutCode = normalizeTryoutCode(body.tryoutCode, testGroup);
   return {
-    periodCode: 'TRYOUT_CONTENT',
+    periodCode: toTryoutPeriodCode(tryoutCode, testGroup),
     periodName: testGroup || null,
     testGroup: testGroup || null,
-    topicId: body.topicId ? String(body.topicId) : null,
+    topicId,
     competency: String(body.competency || '').trim(),
     indicator: String(body.indicator || '').trim(),
     materialName: body.materialName ? String(body.materialName) : null,
@@ -158,11 +169,11 @@ function blueprintData(body: Record<string, unknown>) {
   };
 }
 
-function questionData(body: Record<string, unknown>, blueprintId: string) {
+function questionData(body: Record<string, unknown>, blueprintId: string, topicId: string) {
   const html = String(body.questionHtml || '');
   return {
     code: String(body.code || '').trim(),
-    topicId: String(body.topicId || ''),
+    topicId,
     blueprintId,
     stimulusOrder: Math.max(1, toInt(body.stimulusOrder, 1)),
     questionType: normalizeQuestionType(body.questionType),
@@ -174,6 +185,45 @@ function questionData(body: Record<string, unknown>, blueprintId: string) {
     difficulty: body.difficulty ? String(body.difficulty) : null,
     status: normalizePublishStatus(body.status),
   };
+}
+
+async function resolveTryoutTopic(db: any, body: Record<string, unknown>) {
+  const sourceTopicId = String(body.topicId || '').trim();
+  if (!sourceTopicId) throw new Error('Topik soal tryout wajib dipilih.');
+
+  const sourceTopic = await db.topic.findUnique({ where: { id: sourceTopicId } });
+  if (!sourceTopic) throw new Error('Topik soal tryout tidak ditemukan.');
+  if (isInternalTryoutTopicSlug(sourceTopic.slug)) return sourceTopic;
+
+  const testGroup = String(body.testGroup || '').trim();
+  const tryoutCode = normalizeTryoutCode(body.tryoutCode, testGroup);
+  const internalSlug = makeInternalTryoutTopicSlug(tryoutCode, sourceTopic.slug, sourceTopic.title);
+  return db.topic.upsert({
+    where: { slug: internalSlug },
+    update: {
+      title: sourceTopic.title,
+      subject: sourceTopic.subject,
+      description: `Topik internal untuk ${testGroup} (${tryoutCode}). Tidak ditampilkan sebagai materi siswa.`,
+    },
+    create: {
+      title: sourceTopic.title,
+      slug: internalSlug,
+      subject: sourceTopic.subject,
+      description: `Topik internal untuk ${testGroup} (${tryoutCode}). Tidak ditampilkan sebagai materi siswa.`,
+      orderNo: sourceTopic.orderNo,
+    },
+  });
+}
+
+async function cleanupTopicIfUnused(db: any, topicId: string | null | undefined) {
+  if (!topicId) return;
+  const usage = await db.topic.findUnique({
+    where: { id: topicId },
+    select: { _count: { select: { materials: true, questions: true, blueprints: true } } },
+  });
+  if (usage && usage._count.materials + usage._count.questions + usage._count.blueprints === 0) {
+    await db.topic.delete({ where: { id: topicId } });
+  }
 }
 
 function validateBody(body: Record<string, unknown>) {
@@ -192,13 +242,14 @@ export async function POST(request: Request) {
     const options = buildOptions(body);
     const blueprintCode = String(body.blueprintCode).trim();
     const question = await prisma.$transaction(async (tx) => {
+      const topic = await resolveTryoutTopic(tx, body);
       const blueprint = await tx.blueprint.upsert({
         where: { code: blueprintCode },
-        update: blueprintData(body),
-        create: { code: blueprintCode, ...blueprintData(body) },
+        update: blueprintData(body, topic.id),
+        create: { code: blueprintCode, ...blueprintData(body, topic.id) },
       });
       const created = await tx.question.create({
-        data: { ...questionData(body, blueprint.id), authorId: user.id },
+        data: { ...questionData(body, blueprint.id, topic.id), authorId: user.id },
       });
       await tx.questionOption.createMany({
         data: options.map((option) => ({ questionId: created.id, ...option })),
@@ -230,19 +281,22 @@ export async function PUT(request: Request) {
     const options = buildOptions(body);
     const blueprintCode = String(body.blueprintCode).trim();
     await prisma.$transaction(async (tx) => {
+      const previousTopicId = owned.topicId;
+      const topic = await resolveTryoutTopic(tx, body);
       const blueprint = owned.blueprintId
         ? await tx.blueprint.update({
             where: { id: owned.blueprintId },
-            data: { code: blueprintCode, ...blueprintData(body) },
+            data: { code: blueprintCode, ...blueprintData(body, topic.id) },
           })
         : await tx.blueprint.upsert({
             where: { code: blueprintCode },
-            update: blueprintData(body),
-            create: { code: blueprintCode, ...blueprintData(body) },
+            update: blueprintData(body, topic.id),
+            create: { code: blueprintCode, ...blueprintData(body, topic.id) },
           });
-      await tx.question.update({ where: { id: questionId }, data: questionData(body, blueprint.id) });
+      await tx.question.update({ where: { id: questionId }, data: questionData(body, blueprint.id, topic.id) });
       await tx.questionOption.deleteMany({ where: { questionId } });
       await tx.questionOption.createMany({ data: options.map((option) => ({ questionId, ...option })) });
+      if (previousTopicId !== topic.id) await cleanupTopicIfUnused(tx, previousTopicId);
     });
     return NextResponse.json({ data: await serialize(questionId) });
   } catch (error) {
@@ -266,11 +320,13 @@ export async function DELETE(request: Request) {
   try {
     await prisma.$transaction(async (tx) => {
       const blueprintId = owned.blueprintId;
+      const topicId = owned.topicId;
       await tx.question.delete({ where: { id: questionId } });
       if (blueprintId) {
         const remaining = await tx.question.count({ where: { blueprintId } });
         if (remaining === 0) await tx.blueprint.delete({ where: { id: blueprintId } });
       }
+      await cleanupTopicIfUnused(tx, topicId);
     });
     return NextResponse.json({ ok: true });
   } catch {

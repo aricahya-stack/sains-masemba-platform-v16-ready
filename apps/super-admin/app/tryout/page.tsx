@@ -1,5 +1,5 @@
 import { prisma, UserRole } from '@sh/db';
-import { requireRole } from '@sh/core';
+import { isInternalTryoutTopicSlug, requireRole, tryoutCodeFromPeriodCode } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
 export default async function TryoutAdminPage() {
@@ -19,7 +19,7 @@ export default async function TryoutAdminPage() {
             blueprint: {
               is: {
                 OR: [
-                  { periodCode: 'TRYOUT_CONTENT' },
+                  { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
                   { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
                 ],
               },
@@ -38,6 +38,11 @@ export default async function TryoutAdminPage() {
     }),
   ]);
 
+  const tryoutTopics = topics.map((topic) => ({
+    ...topic,
+    optionLabel: `${isInternalTryoutTopicSlug(topic.slug) ? '[Tryout]' : '[Materi]'} ${topic.title} (${topic.slug})`,
+  }));
+
   const sortedQuestions = [...questions].sort((left, right) => {
     const authorCompare = left.author.fullName.localeCompare(right.author.fullName, 'id');
     if (authorCompare !== 0) return authorCompare;
@@ -49,9 +54,10 @@ export default async function TryoutAdminPage() {
 
   const fields: InlineFieldDef[] = [
     { name: 'authorId', label: 'Pemilik soal tryout', type: 'select', options: authors.map((author) => ({ value: author.id, label: `${author.fullName} • ${author.role === UserRole.GURU ? 'Guru' : 'Super Admin'}` })) },
+    { name: 'tryoutCode', label: 'Kode tryout' },
     { name: 'testGroup', label: 'Nama kelompok tryout' },
     { name: 'blueprintCode', label: 'Kode kisi-kisi' },
-    { name: 'topicId', label: 'Topik', type: 'select', options: topics.map((topic) => ({ value: topic.id, label: topic.title })) },
+    { name: 'topicId', label: 'Topik internal tryout', type: 'select', options: tryoutTopics.map((topic) => ({ value: topic.id, label: topic.optionLabel })) },
     { name: 'competency', label: 'Kompetensi', type: 'richtext', full: true },
     { name: 'indicator', label: 'Indikator', type: 'richtext', full: true },
     { name: 'materialName', label: 'Nama materi pada kisi-kisi' },
@@ -93,6 +99,7 @@ export default async function TryoutAdminPage() {
       authorId: question.authorId,
       authorLabel: question.author.fullName,
       testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
+      tryoutCode: tryoutCodeFromPeriodCode(blueprint?.periodCode, blueprint?.testGroup || mappedTryout?.title || 'Tryout'),
       blueprintId: blueprint?.id || '',
       blueprintCode: blueprint?.code || `LEGACY-${question.code}`,
       competency: blueprint?.competency || 'Kompetensi belum dicatat pada data lama',
@@ -133,11 +140,12 @@ export default async function TryoutAdminPage() {
       endpoint="/api/tryout-content"
       fields={fields}
       initialRows={initialRows}
-      newRowDefaults={{ authorId: admin.id, status: 'DRAFT', questionType: 'SINGLE_CHOICE', scoringMode: 'EXACT_MATCH', maxScore: '1', stimulusOrder: '1', targetQuestionCount: '1' }}
+      newRowDefaults={{ authorId: admin.id, tryoutCode: 'TRYOUT-01', status: 'DRAFT', questionType: 'SINGLE_CHOICE', scoringMode: 'EXACT_MATCH', maxScore: '1', stimulusOrder: '1', targetQuestionCount: '1' }}
       addLabel="Tambah kisi-kisi & soal"
       tableTitle="Tabel tryout"
       tableColumns={[
         { key: 'authorLabel', label: 'Pemilik' },
+        { key: 'tryoutCode', label: 'Kode tryout' },
         { key: 'testGroup', label: 'Tryout' },
         { key: 'stimulusOrder', label: 'No.' },
         { key: 'blueprintCode', label: 'Kisi-kisi' },

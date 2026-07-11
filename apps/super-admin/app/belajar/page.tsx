@@ -1,10 +1,10 @@
 import { prisma, UserRole } from '@sh/db';
-import { requireRole } from '@sh/core';
+import { isInternalTryoutTopicSlug, isTryoutBlueprintLike, requireRole } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
 export default async function BelajarAdminPage() {
   const admin = await requireRole(UserRole.SUPER_ADMIN);
-  const [authors, topics] = await Promise.all([
+  const [authors, allTopics] = await Promise.all([
     prisma.user.findMany({
       where: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } },
       orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
@@ -20,10 +20,28 @@ export default async function BelajarAdminPage() {
           },
           orderBy: { updatedAt: 'desc' },
         },
+        questions: {
+          select: {
+            id: true,
+            blueprint: { select: { periodCode: true, testGroup: true } },
+          },
+        },
+        blueprints: { select: { periodCode: true, testGroup: true } },
       },
       orderBy: [{ orderNo: 'asc' }, { title: 'asc' }],
     }),
   ]);
+
+  const topics = allTopics.filter((topic) => {
+    if (isInternalTryoutTopicSlug(topic.slug)) return false;
+    if (topic.materials.length > 0) return true;
+    if (topic.questions.some((question) => !isTryoutBlueprintLike(question.blueprint))) return true;
+
+    const hasAnyQuestion = topic.questions.length > 0;
+    const hasTryoutBlueprint = topic.blueprints.some((blueprint) => isTryoutBlueprintLike(blueprint));
+    const isLegacyTryoutOnly = hasTryoutBlueprint && (!hasAnyQuestion || topic.questions.every((question) => isTryoutBlueprintLike(question.blueprint)));
+    return !isLegacyTryoutOnly;
+  });
 
   const authorOptions = authors.map((author) => ({
     value: author.id,
@@ -31,6 +49,7 @@ export default async function BelajarAdminPage() {
   }));
 
   const fields: InlineFieldDef[] = [
+    { name: 'topicCode', label: 'Kode topik' },
     { name: 'topicTitle', label: 'Nama topik' },
     { name: 'subject', label: 'Mata pelajaran / rumpun', placeholder: 'Contoh: IPA SMP' },
     { name: 'orderNo', label: 'Urutan tampil', type: 'number' },
@@ -52,6 +71,7 @@ export default async function BelajarAdminPage() {
         _persisted: 'true',
         topicId: topic.id,
         materialId: '',
+        topicCode: topic.slug,
         topicTitle: topic.title,
         subject: topic.subject,
         orderNo: String(topic.orderNo),
@@ -72,6 +92,7 @@ export default async function BelajarAdminPage() {
       _persisted: 'true',
       topicId: topic.id,
       materialId: material.id,
+      topicCode: topic.slug,
       topicTitle: topic.title,
       subject: topic.subject,
       orderNo: String(topic.orderNo),
@@ -92,7 +113,7 @@ export default async function BelajarAdminPage() {
     <InlineEditableManager
       eyebrow="Akademik • Topik & Materi"
       title="Kelola seluruh topik dan materi"
-      description="Topik dan materi seluruh guru dikelola dari satu tabel. Super Admin dapat mengubah pemilik materi, status publikasi, dan seluruh isi dengan editor WYSIWYG."
+      description="Topik belajar dan konten tryout dipisahkan tegas. Kode topik menjadi identitas stabil untuk materi/latihan, sedangkan paket tryout menggunakan kode tryout tersendiri."
       entityName="topik dan materi"
       endpoint="/api/topic-materials"
       fields={fields}
@@ -101,6 +122,7 @@ export default async function BelajarAdminPage() {
       addLabel="Tambah topik & materi"
       tableTitle="Tabel topik dan materi"
       tableColumns={[
+        { key: 'topicCode', label: 'Kode topik' },
         { key: 'orderNo', label: 'Urutan' },
         { key: 'topicTitle', label: 'Topik' },
         { key: 'materialTitle', label: 'Materi' },

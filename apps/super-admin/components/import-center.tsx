@@ -77,7 +77,7 @@ function validateRows(kind: ImportKind, rows: ImportRow[]): ValidationState {
   let warningCount = 0;
   const seenQuestionCodes = new Set<string>();
   const seenEmails = new Set<string>();
-  const tryoutGroupCounts = new Map<string, number>();
+  const tryoutGroupCounts = new Map<string, { name: string; count: number }>();
 
   const addError = (message: string) => {
     errorCount += 1;
@@ -94,6 +94,9 @@ function validateRows(kind: ImportKind, rows: ImportRow[]): ValidationState {
     if (kind === 'MATERIAL') {
       const missing = required(row, ['topicTitle', 'materialTitle']);
       if (missing.length) addError(`Baris data ${line}: kolom wajib kosong (${missing.join(', ')}).`);
+      if (!text(row.kode_topik) && !text(row.topicCode) && !text(row.topicSlug)) {
+        addWarning(`Baris data ${line}: kode topik kosong; sistem akan membuat kode otomatis dari topicTitle.`);
+      }
       const status = text(row.materialStatus).toUpperCase();
       if (status && !allowedPublishStatuses.has(status)) addError(`Baris data ${line}: materialStatus "${status}" tidak valid.`);
       if (!text(row.sectionHtml)) addWarning(`Baris data ${line}: sectionHtml kosong; bagian materi mungkin tidak memiliki isi.`);
@@ -103,6 +106,9 @@ function validateRows(kind: ImportKind, rows: ImportRow[]): ValidationState {
     if (kind === 'QUESTION') {
       const missing = required(row, ['kode_soal', 'jenis_soal', 'topik', 'pertanyaan_html', 'kunci_jawaban']);
       if (missing.length) addError(`Baris data ${line}: kolom wajib kosong (${missing.join(', ')}).`);
+      if (!text(row.kode_topik) && !text(row.topicCode)) {
+        addWarning(`Baris data ${line}: kode_topik kosong; sistem akan memakai nama topik sebagai fallback.`);
+      }
 
       const code = text(row.kode_soal).toUpperCase();
       if (code && seenQuestionCodes.has(code)) addError(`Baris data ${line}: kode soal ${code} duplikat dalam file.`);
@@ -138,7 +144,20 @@ function validateRows(kind: ImportKind, rows: ImportRow[]): ValidationState {
       if (missing.length) addError(`Baris data ${line}: kolom wajib kosong (${missing.join(', ')}).`);
 
       const groupName = text(row.nama_tryout);
-      if (groupName) tryoutGroupCounts.set(groupName, (tryoutGroupCounts.get(groupName) || 0) + 1);
+      const tryoutCode = text(row.kode_tryout || row.tryoutCode).toUpperCase() || groupName.toUpperCase();
+      if (!text(row.kode_tryout) && !text(row.tryoutCode)) {
+        addWarning(`Baris data ${line}: kode_tryout kosong; sistem akan membuat kode otomatis dari nama_tryout.`);
+      }
+      if (!text(row.kode_topik) && !text(row.topicCode)) {
+        addWarning(`Baris data ${line}: kode_topik kosong; sistem akan memakai nama topik sebagai fallback internal tryout.`);
+      }
+      if (groupName) {
+        const current = tryoutGroupCounts.get(tryoutCode);
+        if (current && current.name.toLowerCase() !== groupName.toLowerCase()) {
+          addError(`Baris data ${line}: kode tryout ${tryoutCode} dipakai oleh nama paket berbeda (${current.name} dan ${groupName}).`);
+        }
+        tryoutGroupCounts.set(tryoutCode, { name: current?.name || groupName, count: (current?.count || 0) + 1 });
+      }
       const code = text(row.kode_soal).toUpperCase();
       if (code && seenQuestionCodes.has(code)) addError(`Baris data ${line}: kode soal ${code} duplikat dalam file.`);
       seenQuestionCodes.add(code);
@@ -184,8 +203,8 @@ function validateRows(kind: ImportKind, rows: ImportRow[]): ValidationState {
 
 
   if (kind === 'TRYOUT_CONTENT') {
-    for (const [groupName, count] of tryoutGroupCounts) {
-      if (count !== 30) addError(`Paket ${groupName}: jumlah soal harus tepat 30, tetapi file berisi ${count} soal.`);
+    for (const [tryoutCode, group] of tryoutGroupCounts) {
+      if (group.count !== 30) addError(`Paket ${group.name} (${tryoutCode}): jumlah soal harus tepat 30, tetapi file berisi ${group.count} soal.`);
     }
   }
 
