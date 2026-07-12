@@ -39,6 +39,22 @@ export default async function DeveloperPage() {
         <article className="developer-card male">
           <div className="developer-icon"><UserRoundCheck size={34} /></div>
           <div>
+            <strong>Muh. Rosyid, S.T.</strong>
+            <span>Guru IPA</span>
+            <p>Instansi: MTsN 9 Bantul</p>
+          </div>
+        </article>
+        <article className="developer-card female">
+          <div className="developer-icon"><UserRound size={34} /></div>
+          <div>
+            <strong>Zulisti Sudarojah, S.Pd.I.</strong>
+            <span>Guru IPA</span>
+            <p>Instansi: MTsN 9 Bantul</p>
+          </div>
+        </article>
+        <article className="developer-card male">
+          <div className="developer-icon"><UserRoundCheck size={34} /></div>
+          <div>
             <strong>Ari Cahya Mawardi, M.Pd.</strong>
             <span>Dosen Media Pembelajaran</span>
             <p>Instansi: UIN Sunan Kalijaga Yogyakarta</p>
