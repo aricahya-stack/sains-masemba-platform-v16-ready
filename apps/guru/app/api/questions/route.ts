@@ -152,12 +152,30 @@ function validateBody(body: Record<string, unknown>) {
   }
 }
 
+async function assertPublishedTopic(topicId: unknown) {
+  const id = String(topicId || '').trim();
+  const topic = await prisma.topic.findFirst({
+    where: {
+      id,
+      materials: { some: { status: PublishStatus.PUBLISHED } },
+    },
+    select: { id: true },
+  });
+
+  if (!topic) {
+    throw new Error(
+      'Topik latihan harus memiliki minimal satu materi berstatus PUBLISHED. Topik yang dihapus atau belum dipublikasikan tidak dapat dipilih.',
+    );
+  }
+}
+
 export async function POST(request: Request) {
   const user = await ensureTeacher();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const body = (await request.json()) as Record<string, unknown>;
   try {
     validateBody(body);
+    await assertPublishedTopic(body.topicId);
     const options = buildOptions(body);
     const question = await prisma.$transaction(async (tx) => {
       const created = await tx.question.create({ data: { ...buildQuestionData(body), authorId: user.id } });
@@ -184,6 +202,7 @@ export async function PUT(request: Request) {
 
   try {
     validateBody(body);
+    await assertPublishedTopic(body.topicId);
     const options = buildOptions(body);
     await prisma.$transaction(async (tx) => {
       await tx.question.update({ where: { id: questionId }, data: buildQuestionData(body) });

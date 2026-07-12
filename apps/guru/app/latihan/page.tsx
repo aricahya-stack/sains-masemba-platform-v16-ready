@@ -1,11 +1,16 @@
-import { prisma, UserRole } from '@sh/db';
-import { requireRole } from '@sh/core';
+import { prisma, PublishStatus, UserRole } from '@sh/db';
+import { isInternalTryoutTopicSlug, requireRole } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
 export default async function LatihanPage() {
   await requireRole(UserRole.GURU);
-  const [topics, questions] = await Promise.all([
-    prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
+  const [publishedTopics, questions] = await Promise.all([
+    prisma.topic.findMany({
+      where: {
+        materials: { some: { status: PublishStatus.PUBLISHED } },
+      },
+      orderBy: [{ orderNo: 'asc' }, { title: 'asc' }],
+    }),
     prisma.question.findMany({
       where: {
         tryoutQuestions: { none: {} },
@@ -24,6 +29,11 @@ export default async function LatihanPage() {
       orderBy: { code: 'asc' },
     }),
   ]);
+
+  // Menu Latihan hanya boleh memakai topik belajar yang aktif dipublikasikan.
+  // Topik yang materi PUBLISHED-nya sudah dihapus otomatis tidak masuk pilihan,
+  // meskipun record topiknya masih tertahan karena pernah dipakai oleh soal lama.
+  const topics = publishedTopics.filter((topic) => !isInternalTryoutTopicSlug(topic.slug));
 
   const fields: InlineFieldDef[] = [
     { name: 'code', label: 'Kode soal latihan' },
@@ -84,7 +94,7 @@ export default async function LatihanPage() {
     <InlineEditableManager
       eyebrow="Konten • Latihan"
       title="Soal latihan dalam materi"
-      description="Latihan adalah soal yang tampil pada topik belajar siswa. Semua soal yang tidak terhubung ke paket Tryout dimuat sebagai Latihan, termasuk data lama yang sebelumnya memiliki kisi-kisi."
+      description="Latihan adalah soal yang tampil pada topik belajar siswa. Pilihan topik hanya memuat topik yang memiliki materi berstatus PUBLISHED; topik yang materinya dihapus atau belum dipublikasikan tidak ditampilkan."
       entityName="soal latihan"
       endpoint="/api/questions"
       fields={fields}
