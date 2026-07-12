@@ -1548,3 +1548,47 @@ body { font-family: var(--app-font, Inter, ui-sans-serif, system-ui, -apple-syst
 @media (max-width: 560px) {
   .exam-navigation-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* Patch: Tips TKAD memakai seluruh lebar area konten pada laptop dan layar kecil. */
+.tips-page {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+.tips-page > * {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+.tips-format-grid {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.tips-format-card {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+}
+.tips-format-card > div:last-child {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  overflow-x: auto;
+}
+.tips-format-card img,
+.tips-format-card video,
+.tips-format-card iframe {
+  max-width: 100%;
+  height: auto;
+}
+@media (max-width: 640px) {
+  .tips-page,
+  .tips-page > *,
+  .tips-format-grid,
+  .tips-format-card {
+    width: 100%;
+    max-width: 100%;
+  }
+}
