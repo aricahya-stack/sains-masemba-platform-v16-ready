@@ -389,9 +389,9 @@ export function TopicStudy({
                         className={`button-secondary practice-answer-option${selectedIds.has(option.id) ? ' active' : ''}`}
                         onClick={() => toggleMultipleAnswer(selectedTopic.id, question.id, option.id)}
                       >
+                        <span className="checkbox-mark" aria-hidden="true">{selectedIds.has(option.id) ? '☑' : '☐'}</span>
                         <span className="practice-option-label">{option.label}.</span>
                         <MathHtml html={option.text} />
-                        <span className="checkbox-mark">{selectedIds.has(option.id) ? '☑' : '☐'}</span>
                       </button>
                     ))}
                   </div>
