@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Search } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Search } from 'lucide-react';
 import { MathHtml } from './math-html';
 import {
   type AnswerValue,
@@ -95,6 +95,7 @@ export function TopicStudy({
   const [completed, setCompleted] = useState<Record<string, boolean>>(initialCompleted);
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(initialAnswers);
   const [saveStates, setSaveStates] = useState<Record<string, SaveState>>({});
+  const [visibleMaterials, setVisibleMaterials] = useState<Record<string, boolean>>({});
   const answersRef = useRef<Record<string, AnswerValue>>(initialAnswers);
   const saveQueues = useRef<Record<string, Promise<boolean>>>({});
   const saveVersions = useRef<Record<string, number>>({});
@@ -105,6 +106,19 @@ export function TopicStudy({
     () => topics.find((topic) => topic.id === selectedTopicId) || null,
     [topics, selectedTopicId],
   );
+
+  // Setiap kali siswa membuka atau berpindah topik, seluruh isi materi
+  // kembali disembunyikan. Siswa membukanya secara sadar melalui tombol.
+  useEffect(() => {
+    setVisibleMaterials({});
+  }, [selectedTopicId]);
+
+  const toggleMaterialVisibility = (materialId: string) => {
+    setVisibleMaterials((current) => ({
+      ...current,
+      [materialId]: !current[materialId],
+    }));
+  };
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -259,27 +273,50 @@ export function TopicStudy({
         </div>
 
         {selectedTopic.materials.length === 0 ? <div className="empty-state">Belum ada materi terbit untuk topik ini.</div> : null}
-        {selectedTopic.materials.map((material) => (
-          <article key={material.id} className="card stack">
-            <div>
-              <div className="eyebrow">Materi</div>
-              <strong>{material.title}</strong>
-            </div>
-            <MathHtml html={material.summary || ''} />
-            {material.objectives.length ? (
-              <div>
-                <div className="eyebrow">Tujuan pembelajaran</div>
-                <ul>{material.objectives.map((objective, index) => <li key={`${material.id}-${index}`}>{objective}</li>)}</ul>
+        {selectedTopic.materials.map((material) => {
+          const isMaterialVisible = Boolean(visibleMaterials[material.id]);
+          const contentId = `material-content-${material.id}`;
+
+          return (
+            <article key={material.id} className="card stack">
+              <div className="item-head">
+                <div>
+                  <div className="eyebrow">Materi</div>
+                  <strong>{material.title}</strong>
+                  {!isMaterialVisible ? <p className="muted">Isi materi disembunyikan secara default.</p> : null}
+                </div>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => toggleMaterialVisibility(material.id)}
+                  aria-expanded={isMaterialVisible}
+                  aria-controls={contentId}
+                >
+                  {isMaterialVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+                  {isMaterialVisible ? 'Sembunyikan materi' : 'Tampilkan materi'}
+                </button>
               </div>
-            ) : null}
-            {material.sections.map((section) => (
-              <section key={section.id} className="item-card">
-                <strong>{section.title}</strong>
-                <MathHtml html={section.html || ''} />
-              </section>
-            ))}
-          </article>
-        ))}
+
+              {isMaterialVisible ? (
+                <div id={contentId} className="stack">
+                  <MathHtml html={material.summary || ''} />
+                  {material.objectives.length ? (
+                    <div>
+                      <div className="eyebrow">Tujuan pembelajaran</div>
+                      <ul>{material.objectives.map((objective, index) => <li key={`${material.id}-${index}`}>{objective}</li>)}</ul>
+                    </div>
+                  ) : null}
+                  {material.sections.map((section) => (
+                    <section key={section.id} className="item-card">
+                      <strong>{section.title}</strong>
+                      <MathHtml html={section.html || ''} />
+                    </section>
+                  ))}
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
 
         <section className="card stack">
           <div>
