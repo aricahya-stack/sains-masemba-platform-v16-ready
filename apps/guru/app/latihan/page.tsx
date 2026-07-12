@@ -2,6 +2,10 @@ import { prisma, PublishStatus, UserRole } from '@sh/db';
 import { isInternalTryoutTopicSlug, requireRole } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
+function formatTopicLabel(topic: { orderNo: number; title: string }) {
+  return `${topic.orderNo}. ${topic.title}`;
+}
+
 export default async function LatihanPage() {
   await requireRole(UserRole.GURU);
   const [publishedTopics, questions] = await Promise.all([
@@ -34,10 +38,15 @@ export default async function LatihanPage() {
   // Topik yang materi PUBLISHED-nya sudah dihapus otomatis tidak masuk pilihan,
   // meskipun record topiknya masih tertahan karena pernah dipakai oleh soal lama.
   const topics = publishedTopics.filter((topic) => !isInternalTryoutTopicSlug(topic.slug));
+  const sortedQuestions = [...questions].sort((left, right) =>
+    left.topic.orderNo - right.topic.orderNo
+    || left.stimulusOrder - right.stimulusOrder
+    || left.code.localeCompare(right.code, 'id', { numeric: true }),
+  );
 
   const fields: InlineFieldDef[] = [
     { name: 'code', label: 'Kode soal latihan' },
-    { name: 'topicId', label: 'Topik', type: 'select', options: topics.map((topic) => ({ value: topic.id, label: topic.title })) },
+    { name: 'topicId', label: 'Topik', type: 'select', options: topics.map((topic) => ({ value: topic.id, label: formatTopicLabel(topic) })) },
     { name: 'difficulty', label: 'Kesulitan', type: 'select', options: ['Mudah', 'Sedang', 'Sulit'] },
     { name: 'status', label: 'Status', type: 'select', options: ['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED'] },
     { name: 'questionType', label: 'Jenis soal', type: 'select', options: [
@@ -61,14 +70,14 @@ export default async function LatihanPage() {
     { name: 'correctAnswers', label: 'Kunci jawaban. PG: A; kompleks: A,C,D; benar-salah: B,S,B' },
   ];
 
-  const initialRows = questions.map((question) => {
+  const initialRows = sortedQuestions.map((question) => {
     const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
     return {
       id: question.id,
       _persisted: 'true',
       code: question.code,
       topicId: question.topicId,
-      topicLabel: question.topic.title,
+      topicLabel: formatTopicLabel(question.topic),
       blueprintId: '',
       blueprintLabel: 'Latihan',
       difficulty: question.difficulty || '',
@@ -94,7 +103,7 @@ export default async function LatihanPage() {
     <InlineEditableManager
       eyebrow="Konten • Latihan"
       title="Soal latihan dalam materi"
-      description="Latihan adalah soal yang tampil pada topik belajar siswa. Pilihan topik hanya memuat topik yang memiliki materi berstatus PUBLISHED; topik yang materinya dihapus atau belum dipublikasikan tidak ditampilkan."
+      description="Latihan adalah soal yang tampil pada topik belajar siswa. Pilihan topik hanya memuat topik yang memiliki materi berstatus PUBLISHED, diurutkan berdasarkan nomor topik, dan ditampilkan dengan nomor topiknya. Topik yang materinya dihapus atau belum dipublikasikan tidak ditampilkan."
       entityName="soal latihan"
       endpoint="/api/questions"
       fields={fields}

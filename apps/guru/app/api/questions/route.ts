@@ -9,6 +9,10 @@ async function ensureTeacher() {
 
 const optionLabels = ['A', 'B', 'C', 'D', 'E'];
 
+function formatTopicLabel(topic: { orderNo: number; title: string }) {
+  return `${topic.orderNo}. ${topic.title}`;
+}
+
 function normalizeQuestionType(value: unknown): QuestionType {
   return value === QuestionType.MULTIPLE_CHOICE || value === QuestionType.TRUE_FALSE
     ? value
@@ -108,7 +112,7 @@ async function serialize(questionId: string) {
     _persisted: 'true',
     code: question.code,
     topicId: question.topicId,
-    topicLabel: question.topic.title,
+    topicLabel: formatTopicLabel(question.topic),
     blueprintId: '',
     blueprintLabel: 'Latihan',
     difficulty: question.difficulty || '',
