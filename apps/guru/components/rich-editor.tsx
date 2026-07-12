@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { Bold, Code2, Heading2, Heading3, Image, Italic, Link as LinkIcon, List, ListOrdered, Redo2, Sigma, Table2, Underline, Undo2 } from 'lucide-react';
 import { useToast } from './toast-provider';
+import { MathHtml } from './math-html';
 
 type RichEditorProps = {
   label: string;
@@ -23,6 +24,11 @@ type EditorTool = {
 function escapeAttribute(value: string) {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+function escapeHtml(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 
 export function RichEditor({ label, value, onChange, placeholder }: RichEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
@@ -85,6 +91,21 @@ export function RichEditor({ label, value, onChange, placeholder }: RichEditorPr
     onChange(html);
   };
 
+  const insertLatex = () => {
+    const expression = window.prompt('Masukkan rumus LaTeX tanpa pembatas:', String.raw`\frac{a}{b}`);
+    if (!expression?.trim()) return;
+
+    const displayMode = window.confirm(
+      'Tampilkan sebagai rumus blok?\n\nPilih OK untuk rumus blok atau Batal untuk rumus sebaris.',
+    );
+    const safeExpression = escapeHtml(expression.trim());
+    insertHtml(
+      displayMode
+        ? `<div class="latex-token">\\[${safeExpression}\\]</div>`
+        : `<span class="latex-token">\\(${safeExpression}\\)</span>&nbsp;`,
+    );
+  };
+
   const handleImage = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -112,7 +133,7 @@ export function RichEditor({ label, value, onChange, placeholder }: RichEditorPr
     { title: 'Daftar nomor', icon: ListOrdered, action: () => runCommand('insertOrderedList'), disabled: isSourceMode },
     { title: 'Tautan', icon: LinkIcon, action: createLink, disabled: isSourceMode },
     { title: 'Masukkan gambar', icon: Image, action: () => fileInputRef.current?.click(), disabled: isSourceMode },
-    { title: 'Rumus LaTeX', icon: Sigma, action: () => insertHtml('<span class="latex-token">$x^2 + y^2$</span>&nbsp;'), disabled: isSourceMode },
+    { title: 'Rumus LaTeX', icon: Sigma, action: insertLatex, disabled: isSourceMode },
     { title: isSourceMode ? 'Tutup source HTML' : 'Lihat source HTML', icon: Code2, action: toggleSourceMode, active: isSourceMode },
     { title: 'Tabel', icon: Table2, action: () => insertHtml('<table><tbody><tr><th>Kolom 1</th><th>Kolom 2</th></tr><tr><td>Isi</td><td>Isi</td></tr></tbody></table>'), disabled: isSourceMode },
     { title: 'Undo', icon: Undo2, action: () => runCommand('undo'), disabled: isSourceMode },
@@ -165,6 +186,27 @@ export function RichEditor({ label, value, onChange, placeholder }: RichEditorPr
               onInput={commit}
               onBlur={commit}
             />
+          )}
+        </div>
+
+        <div
+          aria-live="polite"
+          style={{
+            borderTop: '1px solid var(--border)',
+            background: 'var(--surface-muted)',
+            padding: '18px 22px',
+          }}
+        >
+          <div style={{ marginBottom: 10 }}>
+            <strong>Pratinjau konten dan LaTeX</strong>
+            <div className="muted" style={{ marginTop: 4, fontSize: '.9rem' }}>
+              Mendukung <code>\(...\)</code> atau <code>$...$</code> untuk rumus sebaris, serta <code>\[...\]</code> atau <code>$$...$$</code> untuk rumus blok.
+            </div>
+          </div>
+          {value ? (
+            <MathHtml html={value} className="reading-content" />
+          ) : (
+            <div className="muted">Pratinjau akan tampil setelah konten ditulis.</div>
           )}
         </div>
       </div>
