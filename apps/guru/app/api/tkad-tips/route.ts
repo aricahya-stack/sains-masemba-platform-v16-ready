@@ -45,6 +45,7 @@ function buildData(body: Record<string, unknown>) {
 export async function POST(request: Request) {
   const user = await ensureTeacher();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const body = (await request.json()) as Record<string, unknown>;
   const data = buildData(body);
   if (!data.category || !data.title || !data.contentHtml) {
@@ -58,16 +59,21 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
   const user = await ensureTeacher();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const body = (await request.json()) as Record<string, unknown>;
   const id = String(body.id || '');
   if (!id) return NextResponse.json({ error: 'ID tips wajib ada.' }, { status: 400 });
-  const owned = await prisma.tkadTip.findUnique({ where: { id } });
-  if (!owned || owned.authorId !== user.id) return NextResponse.json({ error: 'Tips TKAD tidak ditemukan.' }, { status: 404 });
+
+  // Tips TKAD bersifat global. Guru dapat mengelola tips lama yang mungkin
+  // dibuat oleh akun guru seed/demo atau akun guru lain.
+  const existing = await prisma.tkadTip.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: 'Tips TKAD tidak ditemukan.' }, { status: 404 });
 
   const data = buildData(body);
   if (!data.category || !data.title || !data.contentHtml) {
     return NextResponse.json({ error: 'Kategori, judul, dan isi tips wajib diisi.' }, { status: 400 });
   }
+
   const item = await prisma.tkadTip.update({ where: { id }, data });
   return NextResponse.json({ data: serialize(item) });
 }
@@ -75,10 +81,13 @@ export async function PUT(request: Request) {
 export async function DELETE(request: Request) {
   const user = await ensureTeacher();
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
   const body = (await request.json()) as Record<string, unknown>;
   const id = String(body.id || '');
-  const owned = await prisma.tkadTip.findUnique({ where: { id } });
-  if (!owned || owned.authorId !== user.id) return NextResponse.json({ error: 'Tips TKAD tidak ditemukan.' }, { status: 404 });
+  if (!id) return NextResponse.json({ error: 'ID tips wajib ada.' }, { status: 400 });
+
+  const existing = await prisma.tkadTip.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: 'Tips TKAD tidak ditemukan.' }, { status: 404 });
 
   await prisma.tkadTip.delete({ where: { id } });
   return NextResponse.json({ ok: true });

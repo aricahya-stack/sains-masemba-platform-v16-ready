@@ -16,7 +16,7 @@ export default async function Page() {
   const user = await requireRole(UserRole.GURU);
   const [materials, tips, practiceQuestions, tryoutQuestions, tryouts, attempts] = await Promise.all([
     prisma.material.count(),
-    prisma.tkadTip.count({ where: { authorId: user.id } }),
+    prisma.tkadTip.count(),
     prisma.question.count({ where: {
         tryoutQuestions: { none: {} },
         NOT: {

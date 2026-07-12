@@ -3,9 +3,11 @@ import { requireRole } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
 export default async function TipsTkadPage() {
-  const user = await requireRole(UserRole.GURU);
+  await requireRole(UserRole.GURU);
+
+  // Tips TKAD adalah konten global untuk siswa. Karena itu, tampilkan seluruh
+  // tips tanpa membatasi authorId guru yang sedang login.
   const tips = await prisma.tkadTip.findMany({
-    where: { authorId: user.id },
     orderBy: [{ orderNo: 'asc' }, { updatedAt: 'desc' }],
   });
 
@@ -42,7 +44,7 @@ export default async function TipsTkadPage() {
     <InlineEditableManager
       eyebrow="Tips TKAD"
       title="Kelola strategi dan tips TKAD"
-      description="Tambah dan edit tips langsung pada baris tabel. Hanya tips berstatus PUBLISHED yang tampil pada aplikasi siswa."
+      description="Seluruh Tips TKAD ditampilkan dalam satu tabel global. Tambah dan edit langsung pada baris tabel. Hanya tips berstatus PUBLISHED yang tampil pada aplikasi siswa."
       entityName="tips TKAD"
       endpoint="/api/tkad-tips"
       fields={fields}
