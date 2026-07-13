@@ -15,6 +15,8 @@ export const navItems: NavItem[] = [
   { label: 'Monitoring Tryout', href: '/monitoring', section: 'Ujian', icon: 'MonitorCog' },
   { label: 'Statistik Tryout', href: '/statistik-tryout', section: 'Ujian', icon: 'ChartColumnBig' },
   { label: 'Import Excel', href: '/imports', section: 'Operasional', icon: 'FileSpreadsheet' },
+  { label: 'Backup Data', href: '/backup-data', section: 'Operasional', icon: 'DatabaseBackup' },
+  { label: 'Notifikasi', href: '/notifikasi', section: 'Operasional', icon: 'BellRing' },
   { label: 'Settings', href: '/settings', section: 'Operasional', icon: 'Settings2' },
   { label: 'Pengembang', href: '/pengembang', section: 'Info', icon: 'Code2' },
 ];

@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { NotificationMenu } from './notification-menu';
 import {
-  Bell,
   Search,
   LogOut,
   User,
@@ -39,6 +39,7 @@ import {
   ShieldCheck,
   BookMarked,
   BarChart3,
+  DatabaseBackup,
 } from 'lucide-react';
 
 export type NavItem = { label: string; href: string; section?: string; icon?: string };
@@ -69,6 +70,7 @@ const iconMap = {
   MessageCircleMore,
   UsersRound,
   BellRing,
+  DatabaseBackup,
 };
 
 const loginHighlightIcons = [ShieldCheck, BookMarked, BarChart3] as const;
@@ -283,10 +285,7 @@ export function AppShell({
             <button className="icon-button topbar-ghost" type="button" onClick={toggleMode} title={mode === 'light' ? 'Mode gelap' : 'Mode terang'}>
               {mode === 'light' ? <MoonStar size={16} /> : <SunMedium size={16} />}
             </button>
-            <button className="button-secondary topbar-soft" type="button">
-              <Bell size={16} />
-              Notifikasi
-            </button>
+            <NotificationMenu />
           </div>
         </div>
         {children}

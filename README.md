@@ -1,115 +1,135 @@
-# Sains Masemba Monorepo (npm)
+# Sains Masemba V18.1
 
-Platform belajar dan tryout IPA SMP berbasis **4 aplikasi**:
-- Super Admin
-- Guru
-- Siswa
-- Orang Tua
+Monorepo aplikasi pembelajaran dan tryout IPA SMP dengan empat portal:
 
-Branding visual menggunakan identitas **Sains Masemba** dengan ikon sains, pembelajaran, dan mode tryout/CBT yang fokus.
+- Super Admin — `http://localhost:3000`
+- Guru — `http://localhost:3001`
+- Siswa — `http://localhost:3002`
+- Orang Tua — `http://localhost:3003`
 
-## Akun awal seed
-- Super Admin: `superadmin@sh.local`
-- Guru: `guru@sh.local`
-- Siswa: `siswa@sh.local`
-- Orang Tua: `orangtua@sh.local`
-- Password semua akun: `Admin123!`
+## Fitur utama V18.1
 
-## Syarat
-- Node.js 22.x disarankan
-- npm 10.x
+- pusat notifikasi untuk empat portal;
+- backup seluruh database ke satu workbook Excel;
+- sheet terpisah untuk setiap tabel;
+- manifest jumlah baris dan metadata backup;
+- opsi menyertakan atau mengeluarkan hash password;
+- penyimpanan lossless untuk teks lebih dari 32.000 karakter melalui sheet `LONG_TEXT`;
+- backup terminal sebelum `db push`;
+- restore Excel melalui terminal dengan pengaman eksplisit.
 
-## Langkah install (Mac / Terminal)
+## Instalasi lokal
+
+Syarat:
+
+- Node.js 20 atau 22;
+- npm 10;
+- Docker untuk PostgreSQL lokal, atau koneksi PostgreSQL cloud.
+
+### Docker lokal
+
+Windows:
+
+```text
+INSTALL_LOCAL_DOCKER.bat
+```
+
+macOS/Linux:
 
 ```bash
-cd sains-masemba-platform-v16
-npm ci
-cp .env.example .env
+chmod +x INSTALL_LOCAL_DOCKER.sh
+./INSTALL_LOCAL_DOCKER.sh
 ```
 
-### Isi `.env`
-Ganti placeholder dengan koneksi **Neon PostgreSQL** asli:
+Setelah instalasi:
 
-```env
-DATABASE_URL="postgresql://USER:PASSWORD@HOST-POOLER/DBNAME?sslmode=require"
-DIRECT_URL="postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require"
-AUTH_SECRET="ganti-dengan-secret-random"
-BLOB_READ_WRITE_TOKEN=""
-APP_NAME="Sains Masemba"
-DEFAULT_SEED_PASSWORD="Admin123!"
-```
-
-### Sebarkan env ke package/app
-```bash
-cp .env packages/db/.env
-cp .env apps/guru/.env.local
-cp .env apps/siswa/.env.local
-cp .env apps/super-admin/.env.local
-cp .env apps/orang-tua/.env.local
-```
-
-### Inisialisasi database
-```bash
-npm run db:generate
-npm run db:push
-npm run db:seed
-```
-
-### Jalankan development
 ```bash
 npm run dev
 ```
 
-Port default saat dev:
-- Guru: http://localhost:3000
-- Siswa: http://localhost:3001
-- Super Admin: http://localhost:3002
-- Orang Tua: http://localhost:3003
+### PostgreSQL cloud
+
+```bash
+npm run env:remote
+nano .env
+npm ci
+npm run env:check
+npm run db:init
+npm run dev
+```
+
+Pada Windows, `.env` dapat diedit dengan:
+
+```powershell
+notepad .env
+```
+
+Hanya diperlukan satu `.env` di root proyek.
+
+## Backup data
+
+Dari portal Super Admin:
+
+```text
+Operasional → Backup Data
+```
+
+Atau melalui terminal:
+
+```bash
+npm run db:backup-excel
+```
+
+File terminal disimpan pada folder `backups/`.
+
+## Push database secara aman
+
+```bash
+npm run db:update
+```
+
+Perintah tersebut membuat backup Excel sebelum menjalankan `prisma db push`.
+
+## Restore backup Excel
+
+Restore sengaja tidak tersedia sebagai tombol biasa. Gunakan terminal dengan konfirmasi eksplisit setelah memastikan `DATABASE_URL` benar.
+
+macOS/Linux:
+
+```bash
+ALLOW_EXCEL_RESTORE=YES RESTORE_MODE=REPLACE npm run db:restore-excel -- backups/nama-file.xlsx
+```
+
+PowerShell:
+
+```powershell
+$env:ALLOW_EXCEL_RESTORE="YES"
+$env:RESTORE_MODE="REPLACE"
+npm run db:restore-excel -- backups/nama-file.xlsx
+```
+
+Restore membuat backup otomatis kondisi database saat ini sebelum menghapus dan mengganti data.
+
+## Akun demo
+
+| Portal | Email | Password |
+|---|---|---|
+| Super Admin | `superadmin@sh.local` | `Admin123!` |
+| Guru | `guru@sh.local` | `Admin123!` |
+| Siswa | `siswa@sh.local` | `Admin123!` |
+| Orang Tua | `orangtua@sh.local` | `Admin123!` |
+
+Ganti password seed sebelum penggunaan produksi.
 
 ## Catatan penting
-- Jika browser menampilkan peringatan hydration akibat extension, layout sudah memakai `suppressHydrationWarning`.
-- Import Excel tersedia di setiap menu import dan template ada di `public/templates`.
-- Setiap aksi simpan menampilkan notifikasi, dan setiap hapus memakai konfirmasi.
-- Semua tampilan memakai simbol copyright **© SH**.
-- Menu **Pengembang** menjelaskan aplikasi dibuat menggunakan AI oleh **Sinta Herahmawati** dan **Ari Cahya Mawardi**.
 
-## Struktur singkat
-- `apps/super-admin`
-- `apps/guru`
-- `apps/siswa`
-- `apps/orang-tua`
-- `packages/db`
-- `packages/core`
+- Jangan commit `.env` atau folder `backups/`.
+- Jangan menjalankan `docker compose down -v` jika data lokal masih diperlukan.
+- Excel mencadangkan isi database dan URL file, bukan isi berkas fisik pada Vercel Blob atau penyimpanan eksternal.
+- Untuk produksi, buat juga dump PostgreSQL dari penyedia database atau menggunakan `pg_dump`.
 
+Dokumentasi rinci:
 
-
-## Perubahan v15
-- Rebranding aplikasi tetap menggunakan **Sains Masemba**.
-- Ikon aplikasi diperbarui menjadi SVG minimalis: hanya buku dan gelas reaksi.
-- Favicon, app icon, dan logo publik semua memakai ikon baru yang lebih jelas.
-- Nama pengguna, role, tombol Keluar, dan **© SH** digabung dalam satu kotak transparan di sidebar.
-- Avatar pengguna memakai ikon user, bukan huruf nama.
-- Simbol copyright tetap **© SH** sesuai arahan.
-
-
-## Setelah update v15
-Jalankan ulang `npm run db:push` bila database sudah pernah dipakai, agar struktur terbaru tetap sinkron.
-
-## Catatan Deploy Vercel v16
-
-Versi ini menambahkan konfigurasi Vercel monorepo, mengunci Node.js ke 22.x, dan mengunci npm ke 10.x untuk menghindari error `npm error Exit handler never called!`.
-
-Jangan gunakan Install Command lama:
-
-```bash
-npm install --prefix=../..
-```
-
-Gunakan pola ini sesuai aplikasi yang dideploy:
-
-```bash
-cd ../.. && PRISMA_SKIP_POSTINSTALL_GENERATE=1 npm ci --no-audit --no-fund
-cd ../.. && npm run db:generate && npm run build -w @sh/siswa
-```
-
-Ganti `@sh/siswa` menjadi `@sh/guru`, `@sh/super-admin`, atau `@sh/orang-tua` sesuai aplikasi.
+- `00_MULAI_DI_SINI.md`
+- `ENV_DAN_DATABASE.md`
+- `BACKUP_DAN_UPDATE_AMAN.md`
