@@ -93,6 +93,7 @@ export function InlineEditableManager({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>(blankForm);
   const [loading, setLoading] = useState(false);
+  const formReadOnly = form._readOnly === 'true';
   const [searchText, setSearchText] = useState('');
   const [pageSize, setPageSize] = useState<PageSize>(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -212,7 +213,7 @@ export function InlineEditableManager({
       <div className="inline-table-editor-head">
         <div>
           <div className="eyebrow">Edit langsung dalam tabel</div>
-          <strong>{form._persisted === 'false' ? `Tambah ${entityName}` : `Ubah ${entityName}`}</strong>
+          <strong>{formReadOnly ? `Lihat ${entityName} (hanya-baca)` : form._persisted === 'false' ? `Tambah ${entityName}` : `Ubah ${entityName}`}</strong>
         </div>
         <button className="icon-button" type="button" onClick={cancelEdit} aria-label="Tutup editor"><X size={18} /></button>
       </div>
@@ -226,6 +227,7 @@ export function InlineEditableManager({
                 value={form[field.name] ?? ''}
                 onChange={(next) => setForm((prev) => ({ ...prev, [field.name]: next }))}
                 placeholder={field.placeholder}
+                readOnly={formReadOnly || field.readOnly}
               />
             );
           }
@@ -236,7 +238,7 @@ export function InlineEditableManager({
                 <select
                   className="select"
                   value={form[field.name] ?? ''}
-                  disabled={field.readOnly}
+                  disabled={formReadOnly || field.readOnly}
                   onChange={(event) => setForm((prev) => ({ ...prev, [field.name]: event.target.value }))}
                 >
                   <option value="">Pilih...</option>
@@ -255,7 +257,7 @@ export function InlineEditableManager({
                 type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : field.type === 'datetime-local' ? 'datetime-local' : 'text'}
                 value={form[field.name] ?? ''}
                 placeholder={field.placeholder}
-                readOnly={field.readOnly}
+                readOnly={formReadOnly || field.readOnly}
                 onChange={(event) => setForm((prev) => ({ ...prev, [field.name]: event.target.value }))}
               />
             </div>
@@ -263,9 +265,11 @@ export function InlineEditableManager({
         })}
       </div>
       <div className="button-row inline-editor-actions">
-        <button className="button" type="button" onClick={save} disabled={loading}>
-          <Save size={16} /> {loading ? 'Menyimpan...' : 'Simpan perubahan'}
-        </button>
+        {!formReadOnly ? (
+          <button className="button" type="button" onClick={save} disabled={loading}>
+            <Save size={16} /> {loading ? 'Menyimpan...' : 'Simpan perubahan'}
+          </button>
+        ) : null}
         <button className="button-secondary" type="button" onClick={cancelEdit} disabled={loading}>
           <X size={16} /> Batal
         </button>
@@ -360,9 +364,9 @@ export function InlineEditableManager({
                         <td className="actions-col">
                           <div className="row-actions">
                             <button className="button-secondary" type="button" onClick={() => pick(row)}>
-                              <Pencil size={15} /> Edit
+                              <Pencil size={15} /> {row._readOnly === 'true' ? 'Lihat' : 'Edit'}
                             </button>
-                            <button className="button-danger" type="button" onClick={() => remove(row)} disabled={loading || row._persisted === 'false'}>
+                            <button className="button-danger" type="button" onClick={() => remove(row)} disabled={loading || row._persisted === 'false' || row._readOnly === 'true'}>
                               <Trash2 size={15} /> Hapus
                             </button>
                           </div>

@@ -24,7 +24,12 @@ export default async function TryoutPage() {
     prisma.question.findMany({
       where: {
         AND: [
-          { authorId: user.id },
+          {
+            OR: [
+              { authorId: user.id },
+              { author: { is: { role: UserRole.SUPER_ADMIN } } },
+            ],
+          },
           {
             OR: [
               { tryoutQuestions: { some: {} } },
@@ -43,6 +48,7 @@ export default async function TryoutPage() {
         ],
       },
       include: {
+        author: { select: { id: true, fullName: true, role: true } },
         topic: true,
         blueprint: true,
         options: { orderBy: { label: 'asc' } },
@@ -63,6 +69,7 @@ export default async function TryoutPage() {
   });
 
   const fields: InlineFieldDef[] = [
+    { name: 'sourceOwner', label: 'Pemilik sumber soal', readOnly: true },
     { name: 'tryoutCode', label: 'Kode tryout' },
     { name: 'testGroup', label: 'Nama kelompok tryout' },
     { name: 'blueprintCode', label: 'Kode kisi-kisi' },
@@ -119,6 +126,10 @@ export default async function TryoutPage() {
     return {
       id: question.id,
       _persisted: 'true',
+      _readOnly: question.authorId === user.id ? 'false' : 'true',
+      sourceOwner: question.authorId === user.id
+        ? 'Soal guru sendiri • dapat diedit'
+        : `Soal pusat • ${question.author.fullName} • hanya-baca`,
       testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
       tryoutCode,
       blueprintId: blueprint?.id || '',
@@ -156,7 +167,7 @@ export default async function TryoutPage() {
     <InlineEditableManager
       eyebrow="Ujian • Tryout"
       title="Data tryout: kisi-kisi dan soal"
-      description="Pilihan topik memakai daftar topik belajar yang sama seperti Soal Latihan. Di database, soal tryout tetap ditempatkan pada topik internal khusus agar tidak tercampur dengan soal latihan. Status DRAFT tetap dapat masuk ke Mapping Tryout."
+      description="Soal milik guru dan bank soal pusat dari Super Admin sama-sama ditampilkan. Soal pusat bersifat hanya-baca, sedangkan soal guru sendiri tetap dapat diedit. Pilihan topik memakai 30 topik belajar tanpa mencampurkan soal latihan dengan soal tryout."
       entityName="data tryout"
       endpoint="/api/tryout-content"
       fields={fields}
@@ -165,6 +176,7 @@ export default async function TryoutPage() {
       addLabel="Tambah kisi-kisi & soal"
       tableTitle="Tabel tryout"
       tableColumns={[
+        { key: 'sourceOwner', label: 'Sumber soal' },
         { key: 'tryoutCode', label: 'Kode tryout' },
         { key: 'testGroup', label: 'Tryout' },
         { key: 'stimulusOrder', label: 'No.' },
