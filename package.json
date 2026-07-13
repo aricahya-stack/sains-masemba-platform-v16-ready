@@ -21,8 +21,8 @@
     "build:orang-tua": "npm run build --workspace=@sh/orang-tua",
     "postinstall": "prisma generate || true",
     "vercel-build:super-admin": "npm run db:generate && npm run build --workspace=@sh/super-admin",
-    "vercel-build:guru": "npm run db:generate && npm run db:push && npm run build --workspace=@sh/guru",
-    "vercel-build:siswa": "npm run db:generate && npm run db:push && npm run build --workspace=@sh/siswa",
+    "vercel-build:guru": "npm run db:generate && npm run build --workspace=@sh/guru",
+    "vercel-build:siswa": "npm run db:generate && npm run build --workspace=@sh/siswa",
     "vercel-build:orang-tua": "npm run db:generate && npm run build --workspace=@sh/orang-tua",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
@@ -31,7 +31,8 @@
     "prisma:studio": "prisma studio",
     "db:backup-excel": "npm run backup-excel --workspace=@sh/db",
     "db:restore-excel": "npm run restore-excel --workspace=@sh/db --",
-    "db:update:safe": "npm run db:backup-excel && npm run db:generate && npm run db:push"
+    "db:update:safe": "npm run db:backup-excel && npm run db:generate && npm run db:push",
+    "build:all-portals": "npm run build:super-admin && npm run build:guru && npm run build:siswa && npm run build:orang-tua"
   },
   "devDependencies": {
     "prisma": "^6.5.0",
