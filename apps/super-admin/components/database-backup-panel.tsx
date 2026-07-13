@@ -76,7 +76,7 @@ export function DatabaseBackupPanel({ counts }: { counts: BackupCount[] }) {
       <PageHero
         eyebrow="Operasional · Backup"
         title="Backup seluruh data ke Excel"
-        description="Ekspor seluruh tabel database ke satu workbook dengan sheet terpisah. Lakukan backup sebelum db push, migrasi, pemindahan server, atau pemasangan versi baru."
+        description="Ekspor seluruh tabel database ke satu workbook dengan sheet terpisah. Lakukan backup sebelum db push, migrasi, pemindahan server, atau pemasangan versi baru. Fitur ini tidak mengubah struktur database."
         actions={(
           <a className="button-secondary" href="/templates/database-backup-template.xlsx" download>
             <FileSpreadsheet size={18} /> Unduh Template Kosong
@@ -121,7 +121,7 @@ export function DatabaseBackupPanel({ counts }: { counts: BackupCount[] }) {
             </div>
           </div>
           <p>
-            Mengekspor seluruh data termasuk ID relasi, jawaban, hasil tryout, insiden, notifikasi, pengaturan, dan hash password.
+            Mengekspor seluruh data termasuk ID relasi, jawaban, hasil tryout, insiden, pengaturan, dan hash password.
             Pilihan ini paling sesuai untuk kebutuhan pemulihan database.
           </p>
           <div className="backup-security-note">

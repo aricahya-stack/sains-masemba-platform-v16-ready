@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 import { prisma } from './client';
 
 export const DATABASE_BACKUP_FORMAT = 'SAINS_MASEMBA_EXCEL_BACKUP_V1';
-export const DATABASE_BACKUP_APP_VERSION = '18.1';
+export const DATABASE_BACKUP_APP_VERSION = '16.1-backup-only';
 
 export type DatabaseBackupOptions = {
   generatedBy?: string;
@@ -111,7 +111,6 @@ export async function collectDatabaseBackupSheets(includePasswordHashes = true):
     practiceAttempts,
     practiceAnswers,
     tryoutIncidents,
-    notifications,
   ] = await Promise.all([
     prisma.appSetting.findMany({ orderBy: { key: 'asc' } }),
     prisma.user.findMany({ orderBy: [{ createdAt: 'asc' }, { email: 'asc' }] }),
@@ -131,7 +130,6 @@ export async function collectDatabaseBackupSheets(includePasswordHashes = true):
     prisma.practiceAttempt.findMany({ orderBy: [{ startedAt: 'asc' }, { id: 'asc' }] }),
     prisma.practiceAnswer.findMany({ orderBy: [{ attemptId: 'asc' }, { answeredAt: 'asc' }] }),
     prisma.tryoutIncident.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
-    prisma.notification.findMany({ orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] }),
   ]);
 
   const userHeaders = [
@@ -276,13 +274,6 @@ export async function collectDatabaseBackupSheets(includePasswordHashes = true):
       rows: tryoutIncidents,
       description: 'Log audit insiden selama tryout.',
     },
-    {
-      name: 'NOTIFICATIONS',
-      model: 'Notification',
-      headers: ['id', 'recipientId', 'senderId', 'type', 'title', 'message', 'link', 'isRead', 'readAt', 'createdAt'],
-      rows: notifications,
-      description: 'Pusat notifikasi seluruh pengguna.',
-    },
   ];
 }
 
@@ -374,7 +365,6 @@ export async function getDatabaseBackupCounts() {
     prisma.practiceAttempt.count(),
     prisma.practiceAnswer.count(),
     prisma.tryoutIncident.count(),
-    prisma.notification.count(),
   ]);
   const definitions = [
     ['APP_SETTINGS', 'AppSetting', 'Pengaturan aplikasi dan tema.'],
@@ -395,7 +385,6 @@ export async function getDatabaseBackupCounts() {
     ['PRACTICE_ATTEMPTS', 'PracticeAttempt', 'Progres latihan berdasarkan topik.'],
     ['PRACTICE_ANSWERS', 'PracticeAnswer', 'Jawaban latihan siswa.'],
     ['TRYOUT_INCIDENTS', 'TryoutIncident', 'Log audit insiden selama tryout.'],
-    ['NOTIFICATIONS', 'Notification', 'Pusat notifikasi seluruh pengguna.'],
   ] as const;
   return definitions.map(([sheet, model, description], index) => ({
     sheet,

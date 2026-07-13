@@ -10,7 +10,6 @@
     "typecheck": "echo ok",
     "lint": "echo ok",
     "seed": "tsx prisma/seed.ts",
-    "backfill-notifications": "tsx prisma/backfill-notifications.ts",
     "backup-excel": "tsx prisma/export-backup-excel.ts",
     "restore-excel": "tsx prisma/restore-backup-excel.ts"
   },

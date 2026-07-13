@@ -33,11 +33,9 @@ const specs: RestoreSpec[] = [
   { sheet: 'PRACTICE_ATTEMPTS', delegate: 'practiceAttempt', fieldTypes: { score: 'float', startedAt: 'date', completedAt: 'date', updatedAt: 'date' }, nullable: ['completedAt'] },
   { sheet: 'PRACTICE_ANSWERS', delegate: 'practiceAnswer', fieldTypes: { selectedOptionIds: 'stringArray', trueFalseAnswers: 'json', score: 'float', isCorrect: 'boolean', isAnswered: 'boolean', answeredAt: 'date' }, nullable: ['selectedOptionId', 'trueFalseAnswers'] },
   { sheet: 'TRYOUT_INCIDENTS', delegate: 'tryoutIncident', fieldTypes: { createdAt: 'date' }, nullable: ['attemptId', 'userId', 'message'] },
-  { sheet: 'NOTIFICATIONS', delegate: 'notification', fieldTypes: { isRead: 'boolean', readAt: 'date', createdAt: 'date' }, nullable: ['senderId', 'link', 'readAt'] },
 ];
 
 const deleteOrder = [
-  'notification',
   'tryoutIncident',
   'practiceAnswer',
   'practiceAttempt',

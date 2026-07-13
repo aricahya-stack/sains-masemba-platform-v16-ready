@@ -1,23 +1,13 @@
-DROP-IN BACKUP EXCEL SAINS MASEMBA V18.1
+PATCH BACKUP EXCEL — TANPA NOTIFIKASI
 
-1. BUAT BACKUP DATABASE TERLEBIH DAHULU dari versi yang sedang aktif.
-2. Ekstrak ZIP ini.
-3. Salin seluruh isi folder ke root proyek Sains Masemba V18 dan pilih merge/replace.
-4. Jalankan:
+1. Ekstrak isi ZIP ke root repository Sains Masemba V16.
+2. Pilih Merge/Replace untuk file yang sama.
+3. Jalankan:
 
-   npm ci
+   npm install
    npm run db:generate
-   npm run typecheck
 
-Tidak ada perubahan schema.prisma pada patch ini, sehingga db push tidak wajib hanya untuk memasang fitur backup.
+4. Push ke GitHub dan deploy ulang Vercel.
 
-Setelah aplikasi berjalan, buka portal Super Admin:
-Operasional -> Backup Data
-
-Backup terminal:
-   npm run db:backup-excel
-
-Push database dengan backup otomatis:
-   npm run db:update
-
-Panduan lengkap ada di BACKUP_DAN_UPDATE_AMAN.md.
+Tidak perlu menjalankan prisma db push karena patch ini tidak mengubah schema.prisma.
+Patch ini tidak menambahkan model Notification, migration, atau tabel baru.
