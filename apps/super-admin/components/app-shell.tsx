@@ -37,6 +37,7 @@ import {
   BellRing,
   Quote,
   ShieldCheck,
+  Link2,
   BookMarked,
   BarChart3,
   DatabaseBackup,
@@ -70,6 +71,8 @@ const iconMap = {
   MessageCircleMore,
   UsersRound,
   BellRing,
+  ShieldCheck,
+  Link2,
   DatabaseBackup,
 };
 

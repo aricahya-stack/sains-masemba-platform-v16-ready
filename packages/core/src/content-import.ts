@@ -38,6 +38,7 @@ const questionTypes = new Set(Object.values(QuestionType));
 const scoringModes = new Set(Object.values(ScoringMode));
 const tryoutStatuses = new Set(Object.values(TryoutStatus));
 const userRoles = new Set(Object.values(UserRole));
+const userStatuses = new Set(['ACTIVE', 'INACTIVE']);
 
 function text(value: unknown) {
   return String(value ?? '').trim();
@@ -604,37 +605,108 @@ async function importTryouts(rows: ImportRow[], actor: ImportActor): Promise<Imp
 async function importUsers(rows: ImportRow[]): Promise<ImportResult> {
   const result: ImportResult = {
     kind: 'USER', processedRows: rows.length, created: 0, updated: 0, linked: 0, warnings: [],
-    details: { usersCreated: 0, usersUpdated: 0, withoutPassword: 0 },
+    details: {
+      usersCreated: 0,
+      usersUpdated: 0,
+      withoutPassword: 0,
+      superAdmins: 0,
+      teachers: 0,
+      students: 0,
+      parents: 0,
+    },
   };
 
-  for (const row of rows) {
+  // Validasi seluruh file lebih dahulu. Dengan demikian, satu baris yang rusak tidak
+  // membuat baris pertama telanjur tersimpan lalu proses berhenti di tengah jalan.
+  const seenEmails = new Set<string>();
+  const prepared: Array<{
+    fullName: string;
+    email: string;
+    role: UserRole;
+    phone: string | null;
+    className: string | null;
+    status: string;
+    passwordHash?: string;
+  }> = [];
+
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    const rowNumber = index + 1;
     const fullName = text(row.full_name);
     const email = text(row.email).toLowerCase();
     const role = text(row.role).toUpperCase() as UserRole;
-    if (!fullName || !email || !userRoles.has(role)) throw new Error(`Data user tidak valid: ${email || '(email kosong)'}.`);
-    const existing = await prisma.user.findUnique({ where: { email } });
+
+    if (!fullName) throw new Error(`Baris ${rowNumber}: full_name wajib diisi.`);
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error(`Baris ${rowNumber}: email tidak valid (${email || 'kosong'}).`);
+    }
+    if (!userRoles.has(role)) throw new Error(`Baris ${rowNumber}: role "${text(row.role)}" tidak valid.`);
+    if (seenEmails.has(email)) throw new Error(`Baris ${rowNumber}: email ${email} duplikat dalam file.`);
+    seenEmails.add(email);
+
+    const status = text(row.status).toUpperCase() || 'ACTIVE';
+    if (!userStatuses.has(status)) throw new Error(`Baris ${rowNumber}: status harus ACTIVE atau INACTIVE.`);
+
     const password = text(row.password);
     const passwordHash = password ? await bcrypt.hash(password, 10) : undefined;
-    const data = {
+    prepared.push({
       fullName,
+      email,
       role,
       phone: text(row.phone) || null,
       className: role === UserRole.SISWA ? (text(row.class_name) || null) : null,
-      status: text(row.status) || 'ACTIVE',
-      ...(passwordHash ? { passwordHash } : {}),
-    };
-    if (existing) {
-      await prisma.user.update({ where: { id: existing.id }, data });
-      result.updated += 1;
-      result.details.usersUpdated += 1;
-    } else {
-      await prisma.user.create({ data: { email, ...data, passwordHash: passwordHash || null } });
-      result.created += 1;
-      result.details.usersCreated += 1;
-      if (!passwordHash) result.details.withoutPassword += 1;
-    }
+      status,
+      passwordHash,
+    });
+
+    if (role === UserRole.SUPER_ADMIN) result.details.superAdmins += 1;
+    else if (role === UserRole.GURU) result.details.teachers += 1;
+    else if (role === UserRole.SISWA) result.details.students += 1;
+    else if (role === UserRole.ORANG_TUA) result.details.parents += 1;
   }
-  if (result.details.withoutPassword) result.warnings.push(`${result.details.withoutPassword} akun baru dibuat tanpa password dan belum dapat login sampai password ditetapkan.`);
+
+  const existingUsers = await prisma.user.findMany({
+    where: { email: { in: prepared.map((row) => row.email) } },
+    select: { id: true, email: true },
+  });
+  const existingByEmail = new Map<string, { id: string; email: string }>(
+    existingUsers.map((user: { id: string; email: string }) => [user.email.toLowerCase(), user]),
+  );
+
+  await prisma.$transaction(async (tx) => {
+    for (const row of prepared) {
+      const existing = existingByEmail.get(row.email);
+      const data = {
+        fullName: row.fullName,
+        role: row.role,
+        phone: row.phone,
+        className: row.className,
+        status: row.status,
+        ...(row.passwordHash ? { passwordHash: row.passwordHash } : {}),
+      };
+
+      if (existing) {
+        await tx.user.update({ where: { id: existing.id }, data });
+        result.updated += 1;
+        result.details.usersUpdated += 1;
+      } else {
+        await tx.user.create({
+          data: {
+            email: row.email,
+            ...data,
+            passwordHash: row.passwordHash || null,
+          },
+        });
+        result.created += 1;
+        result.details.usersCreated += 1;
+        if (!row.passwordHash) result.details.withoutPassword += 1;
+      }
+    }
+  }, { maxWait: 10000, timeout: 60000 });
+
+  if (result.details.withoutPassword) {
+    result.warnings.push(`${result.details.withoutPassword} akun baru dibuat tanpa password dan belum dapat login sampai password ditetapkan.`);
+  }
   return result;
 }
 
@@ -643,29 +715,77 @@ async function importParentLinks(rows: ImportRow[]): Promise<ImportResult> {
     kind: 'PARENT_LINK', processedRows: rows.length, created: 0, updated: 0, linked: 0, warnings: [],
     details: { linksCreated: 0, linksUpdated: 0 },
   };
+
+  const seenPairs = new Set<string>();
+  const prepared = rows.map((row, index) => {
+    const rowNumber = index + 1;
+    const parentEmail = text(row.parent_email).toLowerCase();
+    const studentEmail = text(row.student_email).toLowerCase();
+    if (!parentEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) {
+      throw new Error(`Baris ${rowNumber}: parent_email tidak valid.`);
+    }
+    if (!studentEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)) {
+      throw new Error(`Baris ${rowNumber}: student_email tidak valid.`);
+    }
+    const pairKey = `${parentEmail}::${studentEmail}`;
+    if (seenPairs.has(pairKey)) throw new Error(`Baris ${rowNumber}: relasi ${parentEmail} dan ${studentEmail} duplikat dalam file.`);
+    seenPairs.add(pairKey);
+    return {
+      rowNumber,
+      parentEmail,
+      studentEmail,
+      relationType: text(row.relation_type) || 'Wali',
+      isActive: parseBoolean(row.is_active, true),
+    };
+  });
+
+  const emails = [...new Set(prepared.flatMap((row) => [row.parentEmail, row.studentEmail]))];
+  const users = await prisma.user.findMany({
+    where: { email: { in: emails } },
+    select: { id: true, email: true, role: true },
+  });
+  const usersByEmail = new Map<string, { id: string; email: string; role: UserRole }>(
+    users.map((user: { id: string; email: string; role: UserRole }) => [user.email.toLowerCase(), user]),
+  );
+
+  const resolved = prepared.map((row) => {
+    const parent = usersByEmail.get(row.parentEmail);
+    const student = usersByEmail.get(row.studentEmail);
+    if (!parent) throw new Error(`Baris ${row.rowNumber}: akun orang tua ${row.parentEmail} tidak ditemukan.`);
+    if (!student) throw new Error(`Baris ${row.rowNumber}: akun siswa ${row.studentEmail} tidak ditemukan.`);
+    if (parent.role !== UserRole.ORANG_TUA) throw new Error(`Baris ${row.rowNumber}: ${row.parentEmail} bukan akun ORANG_TUA.`);
+    if (student.role !== UserRole.SISWA) throw new Error(`Baris ${row.rowNumber}: ${row.studentEmail} bukan akun SISWA.`);
+    return { ...row, parentId: parent.id, studentId: student.id };
+  });
+
+  const existingLinks = await prisma.parentStudentLink.findMany({
+    where: {
+      parentId: { in: [...new Set(resolved.map((row) => row.parentId))] },
+      studentId: { in: [...new Set(resolved.map((row) => row.studentId))] },
+    },
+    select: { id: true, parentId: true, studentId: true },
+  });
+  const existingByPair = new Map<string, { id: string; parentId: string; studentId: string }>(
+    existingLinks.map((link: { id: string; parentId: string; studentId: string }) => [`${link.parentId}::${link.studentId}`, link]),
+  );
+
   await prisma.$transaction(async (tx) => {
-    for (const row of rows) {
-      const parentEmail = text(row.parent_email).toLowerCase();
-      const studentEmail = text(row.student_email).toLowerCase();
-      if (!parentEmail || !studentEmail) throw new Error('parent_email dan student_email wajib diisi.');
-      const [parent, student] = await Promise.all([
-        tx.user.findUnique({ where: { email: parentEmail } }),
-        tx.user.findUnique({ where: { email: studentEmail } }),
-      ]);
-      if (!parent || !student) throw new Error(`User relasi tidak ditemukan: ${parentEmail} / ${studentEmail}.`);
-      const existing = await tx.parentStudentLink.findUnique({ where: { parentId_studentId: { parentId: parent.id, studentId: student.id } } });
-      const data = { relationType: text(row.relation_type) || 'Wali', isActive: parseBoolean(row.is_active, true) };
+    for (const row of resolved) {
+      const existing = existingByPair.get(`${row.parentId}::${row.studentId}`);
+      const data = { relationType: row.relationType, isActive: row.isActive };
       if (existing) {
         await tx.parentStudentLink.update({ where: { id: existing.id }, data });
         result.updated += 1;
         result.details.linksUpdated += 1;
       } else {
-        await tx.parentStudentLink.create({ data: { parentId: parent.id, studentId: student.id, ...data } });
+        await tx.parentStudentLink.create({ data: { parentId: row.parentId, studentId: row.studentId, ...data } });
         result.created += 1;
         result.details.linksCreated += 1;
       }
+      result.linked += 1;
     }
-  }, { timeout: 60000 });
+  }, { maxWait: 10000, timeout: 60000 });
+
   return result;
 }
 

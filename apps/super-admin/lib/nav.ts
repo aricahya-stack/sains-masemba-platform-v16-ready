@@ -3,10 +3,12 @@ import type { NavItem } from '../components/app-shell';
 export const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/', section: 'Utama', icon: 'LayoutDashboard' },
   { label: 'Profil', href: '/profil', section: 'Utama', icon: 'User' },
-  { label: 'User', href: '/users', section: 'Manajemen', icon: 'Users' },
+  { label: 'Semua User', href: '/users', section: 'Manajemen', icon: 'Users' },
+  { label: 'Super Admin', href: '/super-admin', section: 'Manajemen', icon: 'ShieldCheck' },
   { label: 'Guru', href: '/guru', section: 'Manajemen', icon: 'GraduationCap' },
   { label: 'Siswa', href: '/siswa', section: 'Manajemen', icon: 'BookUser' },
   { label: 'Orang Tua', href: '/orang-tua', section: 'Manajemen', icon: 'HeartHandshake' },
+  { label: 'Relasi Ortu-Siswa', href: '/relasi-orang-tua', section: 'Manajemen', icon: 'Link2' },
   { label: 'Topik & Materi', href: '/belajar', section: 'Akademik', icon: 'BookOpenText' },
   { label: 'Latihan', href: '/latihan', section: 'Akademik', icon: 'ClipboardPenLine' },
   { label: 'Approval', href: '/approval', section: 'Akademik', icon: 'BadgeCheck' },

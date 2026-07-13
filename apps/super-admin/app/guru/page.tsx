@@ -33,7 +33,7 @@ export default async function GuruPage() {
     <EditableManager
       eyebrow="Guru"
       title="Kelola akun guru"
-      description="Edit akun guru, nonaktifkan, atau hapus dari sistem."
+      description="Tambahkan banyak akun guru, edit data, nonaktifkan, atau hapus. Form otomatis kembali ke mode tambah setelah akun baru disimpan."
       entityName="guru"
       endpoint="/api/users"
       fields={fields}

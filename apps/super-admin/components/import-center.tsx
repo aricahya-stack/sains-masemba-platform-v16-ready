@@ -39,13 +39,18 @@ const allowedQuestionTypes = new Set(['SINGLE_CHOICE', 'MULTIPLE_CHOICE', 'TRUE_
 const allowedScoringModes = new Set(['EXACT_MATCH', 'PARTIAL_NO_PENALTY']);
 const allowedPublishStatuses = new Set(['DRAFT', 'REVIEW', 'PUBLISHED', 'ARCHIVED']);
 const allowedUserRoles = new Set(['SUPER_ADMIN', 'GURU', 'SISWA', 'ORANG_TUA']);
+const allowedUserStatuses = new Set(['ACTIVE', 'INACTIVE']);
 
 function text(value: unknown) {
   return String(value ?? '').trim();
 }
 
+function cleanHeader(value: unknown) {
+  return text(value).replace(/^\uFEFF/, '').replace(/[\u200B-\u200D\u2060]/g, '').trim();
+}
+
 function normalizedHeaders(headers: string[]) {
-  return new Set(headers.map((header) => header.trim()));
+  return new Set(headers.map((header) => cleanHeader(header)));
 }
 
 function detectImportKind(headers: string[]): ImportKind | null {
@@ -189,15 +194,22 @@ function validateRows(kind: ImportKind, rows: ImportRow[]): ValidationState {
       if (missing.length) addError(`Baris data ${line}: kolom wajib kosong (${missing.join(', ')}).`);
       const email = text(row.email).toLowerCase();
       const role = text(row.role).toUpperCase();
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) addError(`Baris data ${line}: format email ${email} tidak valid.`);
       if (email && seenEmails.has(email)) addError(`Baris data ${line}: email ${email} duplikat dalam file.`);
-      seenEmails.add(email);
+      if (email) seenEmails.add(email);
       if (role && !allowedUserRoles.has(role)) addError(`Baris data ${line}: role "${role}" tidak valid.`);
+      const userStatus = text(row.status).toUpperCase();
+      if (userStatus && !allowedUserStatuses.has(userStatus)) addError(`Baris data ${line}: status "${userStatus}" tidak valid.`);
       if (!text(row.password)) addWarning(`Baris data ${line}: password kosong; akun baru belum dapat login sampai password ditetapkan.`);
     }
 
     if (kind === 'PARENT_LINK') {
       const missing = required(row, ['parent_email', 'student_email']);
       if (missing.length) addError(`Baris data ${line}: kolom wajib kosong (${missing.join(', ')}).`);
+      const parentEmail = text(row.parent_email).toLowerCase();
+      const studentEmail = text(row.student_email).toLowerCase();
+      if (parentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) addError(`Baris data ${line}: parent_email tidak valid.`);
+      if (studentEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(studentEmail)) addError(`Baris data ${line}: student_email tidak valid.`);
     }
   });
 
@@ -285,28 +297,43 @@ export function ImportCenter({
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: 'array' });
-      const firstSheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[firstSheetName];
-      const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false });
-      const headerIndex = matrix.findIndex((candidate) => detectImportKind((candidate || []).map((value) => text(value))) !== null);
-      if (headerIndex < 0) throw new Error('Header template tidak dikenali. Gunakan template resmi aplikasi.');
+      const detectedSheets: Array<{ sheetName: string; kind: ImportKind; rows: ImportRow[] }> = [];
 
-      const headers = (matrix[headerIndex] || []).map((value) => text(value));
-      const detectedKind = detectImportKind(headers);
-      if (!detectedKind) throw new Error('Jenis import tidak dapat dikenali dari header file.');
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, defval: '', raw: false });
+        const headerIndex = matrix.findIndex((candidate) =>
+          detectImportKind((candidate || []).map((value) => cleanHeader(value))) !== null,
+        );
+        if (headerIndex < 0) continue;
 
-      const parsedRows = matrix
-        .slice(headerIndex + 1)
-        .filter((candidate) => (candidate || []).some((value) => text(value)))
-        .map((candidate) => Object.fromEntries(headers.map((header, index) => [header, candidate?.[index] ?? ''])) as ImportRow);
+        const headers = (matrix[headerIndex] || []).map((value) => cleanHeader(value));
+        const sheetKind = detectImportKind(headers);
+        if (!sheetKind) continue;
 
-      if (!parsedRows.length) throw new Error('File tidak memiliki baris data setelah header.');
+        const sheetRows = matrix
+          .slice(headerIndex + 1)
+          .filter((candidate) => (candidate || []).some((value) => text(value)))
+          // Abaikan header yang terulang di tengah file akibat copy/paste atau pemisahan halaman.
+          .filter((candidate) => !headers.every((header, index) => cleanHeader(candidate?.[index]) === header))
+          .map((candidate) => Object.fromEntries(headers.map((header, index) => [header, candidate?.[index] ?? ''])) as ImportRow);
+
+        if (sheetRows.length) detectedSheets.push({ sheetName, kind: sheetKind, rows: sheetRows });
+      }
+
+      if (!detectedSheets.length) throw new Error('Header template tidak dikenali atau file tidak memiliki baris data. Gunakan template resmi aplikasi.');
+      const detectedKinds = new Set(detectedSheets.map((item) => item.kind));
+      if (detectedKinds.size > 1) throw new Error('Satu file hanya boleh memuat satu jenis import. Pisahkan user, relasi, materi, dan soal ke file berbeda.');
+
+      const detectedKind = detectedSheets[0].kind;
+      const parsedRows = detectedSheets.flatMap((item) => item.rows);
+      const sheetNames = detectedSheets.map((item) => item.sheetName);
 
       setKind(detectedKind);
       setRows(parsedRows);
       setPreviewRows(parsedRows.slice(0, 5));
-      setSummary(`File: ${file.name} • Sheet: ${firstSheetName} • Jenis: ${kindLabels[detectedKind]} • Total baris: ${parsedRows.length}`);
-      notify('File berhasil dibaca', `${parsedRows.length} baris ${kindLabels[detectedKind]} siap divalidasi.`);
+      setSummary(`File: ${file.name} • Sheet terbaca: ${sheetNames.join(', ')} • Jenis: ${kindLabels[detectedKind]} • Total baris: ${parsedRows.length}`);
+      notify('File berhasil dibaca', `${parsedRows.length} baris ${kindLabels[detectedKind]} dari ${sheetNames.length} sheet siap divalidasi.`);
     } catch (error) {
       setRows([]);
       setPreviewRows([]);
@@ -340,7 +367,7 @@ export function ImportCenter({
     setProgress('Menyiapkan import...');
 
     try {
-      const chunkSize = kind === 'QUESTION' ? 40 : kind === 'USER' ? 100 : rows.length;
+      const chunkSize = kind === 'QUESTION' ? 40 : kind === 'USER' ? 50 : kind === 'PARENT_LINK' ? 100 : rows.length;
       const chunks: ImportRow[][] = [];
       for (let index = 0; index < rows.length; index += chunkSize) chunks.push(rows.slice(index, index + chunkSize));
 
@@ -391,7 +418,7 @@ export function ImportCenter({
         <div>
           <div className="eyebrow">Import ke database</div>
           <strong>1. Pilih file → 2. Validasi → 3. Import</strong>
-          <p className="muted">Data tidak otomatis disimpan saat file dipilih. Tombol Import ke Database baru aktif setelah validasi berhasil tanpa error.</p>
+          <p className="muted">Data tidak otomatis disimpan saat file dipilih. Setiap baris user menghasilkan satu akun; banyak Super Admin, guru, siswa, dan orang tua dapat dimuat dalam file yang sama. Tombol Import ke Database baru aktif setelah validasi berhasil tanpa error.</p>
         </div>
 
         <input className="input" type="file" accept=".xlsx,.xls" onChange={(event) => onFile(event.target.files?.[0] || null)} />

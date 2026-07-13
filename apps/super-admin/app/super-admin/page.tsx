@@ -2,38 +2,38 @@ import { prisma, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
 import { EditableManager, type FieldDef } from '../../components/editable-manager';
 
-export default async function OrangTuaPage() {
+export default async function SuperAdminPage() {
   await requireRole(UserRole.SUPER_ADMIN);
-  const parents = await prisma.user.findMany({
-    where: { role: UserRole.ORANG_TUA },
+  const admins = await prisma.user.findMany({
+    where: { role: UserRole.SUPER_ADMIN },
     orderBy: { fullName: 'asc' },
   });
 
   const fields: FieldDef[] = [
     { name: 'fullName', label: 'Nama lengkap' },
     { name: 'email', label: 'Email' },
-    { name: 'role', label: 'Role', type: 'select', options: [{ label: 'Orang Tua', value: 'ORANG_TUA' }] },
+    { name: 'role', label: 'Role', type: 'select', options: [{ label: 'Super Admin', value: 'SUPER_ADMIN' }] },
     { name: 'phone', label: 'Nomor HP' },
     { name: 'status', label: 'Status', type: 'select', options: ['ACTIVE', 'INACTIVE'] },
     { name: 'password', label: 'Password baru', type: 'password', placeholder: 'Kosongkan jika tidak diubah' },
   ];
 
-  const initialRows = parents.map((parent) => ({
-    id: parent.id,
-    fullName: parent.fullName,
-    email: parent.email,
-    role: parent.role,
-    phone: parent.phone || '',
-    status: parent.status,
+  const initialRows = admins.map((admin) => ({
+    id: admin.id,
+    fullName: admin.fullName,
+    email: admin.email,
+    role: admin.role,
+    phone: admin.phone || '',
+    status: admin.status,
     password: '',
   }));
 
   return (
     <EditableManager
-      eyebrow="Orang Tua"
-      title="Kelola akun orang tua"
-      description="Tambahkan banyak akun orang tua/wali. Untuk jumlah besar, gunakan Import Excel; setelah akun tersedia, hubungkan dengan siswa melalui menu Relasi Ortu-Siswa."
-      entityName="orang tua"
+      eyebrow="Super Admin"
+      title="Kelola akun Super Admin"
+      description="Sistem mendukung lebih dari satu Super Admin. Akun aktif terakhir dilindungi agar akses administrasi tidak terputus."
+      entityName="Super Admin"
       endpoint="/api/users"
       fields={fields}
       initialRows={initialRows}

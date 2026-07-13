@@ -40,7 +40,7 @@ export default async function UsersPage() {
     <EditableManager
       eyebrow="Manajemen user"
       title="Kelola semua akun"
-      description="Super admin dapat menambah, mengubah role, menonaktifkan user, dan mereset password."
+      description="Kelola seluruh akun tanpa batas satu akun per role. Super Admin, guru, siswa, dan orang tua dapat berjumlah lebih dari satu."
       entityName="user"
       endpoint="/api/users"
       fields={fields}

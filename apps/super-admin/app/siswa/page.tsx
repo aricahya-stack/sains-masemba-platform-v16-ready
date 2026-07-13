@@ -35,7 +35,7 @@ export default async function SiswaPage() {
     <EditableManager
       eyebrow="Siswa"
       title="Kelola akun siswa"
-      description="Edit akun siswa, nonaktifkan, atau hapus dari sistem."
+      description="Kelola banyak akun siswa. Gunakan Import Excel untuk data massal; tabel dilengkapi pencarian dan pembagian halaman."
       entityName="siswa"
       endpoint="/api/users"
       fields={fields}

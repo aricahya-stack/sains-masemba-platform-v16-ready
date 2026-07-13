@@ -65,18 +65,40 @@ export function EditableManager({
     () =>
       fields.reduce(
         (acc, field) => {
-          acc[field.name] = '';
+          const options = field.type === 'select' ? field.options || [] : [];
+          const hasActiveOption = options.some((option) => optionValue(option) === 'ACTIVE');
+          const hasTrueOption = options.some((option) => optionValue(option) === 'true');
+
+          if (options.length === 1) acc[field.name] = optionValue(options[0]);
+          else if (field.name === 'status' && hasActiveOption) acc[field.name] = 'ACTIVE';
+          else if (field.name === 'isActive' && hasTrueOption) acc[field.name] = 'true';
+          else acc[field.name] = '';
           return acc;
         },
         { id: '' } as Record<string, string>,
       ),
     [fields],
   );
-  const [selectedId, setSelectedId] = useState<string | null>(initialRows[0]?.id ?? null);
-  const [form, setForm] = useState<Record<string, string>>(initialRows[0] ? { ...initialRows[0], password: '' } : blankForm);
+  // Selalu buka halaman dalam mode tambah. Memilih baris tabel adalah satu-satunya
+  // cara masuk ke mode edit, sehingga input akun berikutnya tidak menimpa akun pertama.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [form, setForm] = useState<Record<string, string>>({ ...blankForm });
   const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
 
   const visibleColumns = tableColumns || fields.slice(0, 5).map((field) => ({ key: field.name, label: field.label }));
+  const filteredRows = useMemo(() => {
+    const keyword = search.trim().toLowerCase();
+    if (!keyword) return rows;
+    return rows.filter((row) =>
+      visibleColumns.some((column) => stripHtml(String(row[column.key] || '')).toLowerCase().includes(keyword)),
+    );
+  }, [rows, search, visibleColumns]);
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const currentPage = Math.min(page, pageCount);
+  const pagedRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const pick = (row: Record<string, string>) => {
     setSelectedId(row.id);
@@ -106,9 +128,19 @@ export function EditableManager({
       setRows((prev) =>
         prev.some((item) => item.id === next.id) ? prev.map((item) => (item.id === next.id ? next : item)) : [next, ...prev],
       );
-      setForm({ ...next, password: '' });
-      setSelectedId(next.id);
-      notify('Sudah tersimpan', `${entityName} berhasil disimpan.`);
+
+      if (method === 'POST') {
+        // Setelah membuat data baru, kembali ke form kosong agar entri berikutnya
+        // menghasilkan record baru, bukan memperbarui record yang barusan dibuat.
+        setSelectedId(null);
+        setForm({ ...blankForm });
+        setPage(1);
+        notify('Data baru tersimpan', `${entityName} berhasil ditambahkan. Form siap untuk data berikutnya.`);
+      } else {
+        setForm({ ...next, password: '' });
+        setSelectedId(next.id);
+        notify('Perubahan tersimpan', `${entityName} berhasil diperbarui.`);
+      }
     } catch (error) {
       notify('Gagal menyimpan', error instanceof Error ? error.message : 'Terjadi kesalahan.');
     } finally {
@@ -149,10 +181,10 @@ export function EditableManager({
         actions={
           <>
             <button className="button" type="button" onClick={save} disabled={loading}>
-              {loading ? 'Menyimpan...' : 'Simpan'}
+              {loading ? 'Menyimpan...' : form.id ? 'Simpan Perubahan' : `Tambah ${entityName}`}
             </button>
             <button className="button-secondary" type="button" onClick={resetForm} disabled={loading}>
-              Data Baru
+              {form.id ? 'Batal Edit' : 'Kosongkan Form'}
             </button>
           </>
         }
@@ -161,8 +193,12 @@ export function EditableManager({
         <section className="card stack">
           <div>
             <div className="eyebrow">Form</div>
-            <strong>Editor {entityName}</strong>
-            <p className="muted">Setiap klik simpan memunculkan notifikasi. Data dapat diedit ulang kapan saja.</p>
+            <strong>{form.id ? `Edit ${entityName}` : `Tambah ${entityName} baru`}</strong>
+            <p className="muted">
+              {form.id
+                ? 'Anda sedang mengubah data yang dipilih dari tabel. Klik Batal Edit untuk kembali ke mode tambah.'
+                : 'Setelah data ditambahkan, form otomatis dikosongkan agar Anda dapat langsung memasukkan akun berikutnya.'}
+            </p>
           </div>
           <div className="form-grid">
             {fields.map((field) => {
@@ -223,9 +259,26 @@ export function EditableManager({
           <div>
             <div className="eyebrow">Data tersimpan</div>
             <strong>Tabel {entityName}</strong>
+            <p className="muted">Menampilkan maksimal {pageSize} data per halaman agar daftar besar tetap ringan.</p>
           </div>
-          {rows.length === 0 ? <div className="empty-state">Belum ada data.</div> : null}
           {rows.length > 0 ? (
+            <div className="field full">
+              <label>Cari data</label>
+              <input
+                className="input"
+                type="search"
+                value={search}
+                placeholder="Cari nama, email, kelas, nomor HP, atau status..."
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+          ) : null}
+          {rows.length === 0 ? <div className="empty-state">Belum ada data.</div> : null}
+          {rows.length > 0 && filteredRows.length === 0 ? <div className="empty-state">Data tidak ditemukan.</div> : null}
+          {pagedRows.length > 0 ? (
             <div className="table-wrapper">
               <table className="data-table">
                 <thead>
@@ -237,7 +290,7 @@ export function EditableManager({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row) => (
+                  {pagedRows.map((row) => (
                     <tr key={row.id} className={selectedId === row.id ? 'is-selected' : ''}>
                       {visibleColumns.map((column) => (
                         <td key={column.key} title={stripHtml(String(row[column.key] || '-'))}>
@@ -260,6 +313,31 @@ export function EditableManager({
                   ))}
                 </tbody>
               </table>
+            </div>
+          ) : null}
+          {filteredRows.length > pageSize ? (
+            <div className="button-row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+              <span className="muted">
+                Halaman {currentPage} dari {pageCount} • {filteredRows.length} data
+              </span>
+              <div className="button-row">
+                <button
+                  className="button-secondary"
+                  type="button"
+                  disabled={currentPage <= 1}
+                  onClick={() => setPage((value) => Math.max(1, value - 1))}
+                >
+                  Sebelumnya
+                </button>
+                <button
+                  className="button-secondary"
+                  type="button"
+                  disabled={currentPage >= pageCount}
+                  onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+                >
+                  Berikutnya
+                </button>
+              </div>
             </div>
           ) : null}
         </section>
