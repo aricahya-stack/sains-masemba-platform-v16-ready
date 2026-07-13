@@ -12,8 +12,13 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const tryout = await prisma.tryout.findUnique({ where: { id: String(body.tryoutId) } });
-  if (!tryout || tryout.authorId !== user.id) return NextResponse.json({ error: 'Tryout tidak ditemukan.' }, { status: 404 });
+  const tryout = await prisma.tryout.findFirst({
+    where: {
+      id: String(body.tryoutId),
+      author: { is: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } } },
+    },
+  });
+  if (!tryout) return NextResponse.json({ error: 'Tryout tidak ditemukan.' }, { status: 404 });
 
   const action = String(body.action || '');
   let status = tryout.status;

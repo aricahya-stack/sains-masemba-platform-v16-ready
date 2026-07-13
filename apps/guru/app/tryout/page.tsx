@@ -25,10 +25,7 @@ export default async function TryoutPage() {
       where: {
         AND: [
           {
-            OR: [
-              { authorId: user.id },
-              { author: { is: { role: UserRole.SUPER_ADMIN } } },
-            ],
+            author: { is: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } } },
           },
           {
             OR: [
@@ -69,7 +66,7 @@ export default async function TryoutPage() {
   });
 
   const fields: InlineFieldDef[] = [
-    { name: 'sourceOwner', label: 'Pemilik sumber soal', readOnly: true },
+    { name: 'sourceOwner', label: 'Pembuat soal', readOnly: true },
     { name: 'tryoutCode', label: 'Kode tryout' },
     { name: 'testGroup', label: 'Nama kelompok tryout' },
     { name: 'blueprintCode', label: 'Kode kisi-kisi' },
@@ -126,10 +123,9 @@ export default async function TryoutPage() {
     return {
       id: question.id,
       _persisted: 'true',
-      _readOnly: question.authorId === user.id ? 'false' : 'true',
-      sourceOwner: question.authorId === user.id
-        ? 'Soal guru sendiri • dapat diedit'
-        : `Soal pusat • ${question.author.fullName} • hanya-baca`,
+      _readOnly: 'false',
+      _deleteDisabled: question.authorId === user.id ? 'false' : 'true',
+      sourceOwner: `Dibuat oleh ${question.author.fullName}${question.author.role === UserRole.SUPER_ADMIN ? ' (Super Admin)' : ' (Guru)'} • dapat diedit semua guru`,
       testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
       tryoutCode,
       blueprintId: blueprint?.id || '',
@@ -167,7 +163,7 @@ export default async function TryoutPage() {
     <InlineEditableManager
       eyebrow="Ujian • Tryout"
       title="Data tryout: kisi-kisi dan soal"
-      description="Soal milik guru dan bank soal pusat dari Super Admin sama-sama ditampilkan. Soal pusat bersifat hanya-baca, sedangkan soal guru sendiri tetap dapat diedit. Pilihan topik memakai 30 topik belajar tanpa mencampurkan soal latihan dengan soal tryout."
+      description="Bank soal tryout digunakan bersama. Seluruh guru dapat melihat dan mengedit soal yang dibuat guru lain maupun Super Admin. Hak hapus tetap hanya dimiliki pembuat soal agar data tidak terhapus sembarangan. Pilihan topik memakai 30 topik belajar tanpa mencampurkan soal latihan dengan soal tryout."
       entityName="data tryout"
       endpoint="/api/tryout-content"
       fields={fields}
@@ -176,7 +172,7 @@ export default async function TryoutPage() {
       addLabel="Tambah kisi-kisi & soal"
       tableTitle="Tabel tryout"
       tableColumns={[
-        { key: 'sourceOwner', label: 'Sumber soal' },
+        { key: 'sourceOwner', label: 'Pembuat soal' },
         { key: 'tryoutCode', label: 'Kode tryout' },
         { key: 'testGroup', label: 'Tryout' },
         { key: 'stimulusOrder', label: 'No.' },

@@ -23,9 +23,12 @@ function buildAttemptNumberMap(attempts: AttemptOrder[]) {
 }
 
 export default async function MonitoringTryoutPage() {
-  const user = await requireRole(UserRole.GURU);
+  await requireRole(UserRole.GURU);
   const tryouts = await prisma.tryout.findMany({
-    where: { authorId: user.id, status: { in: [TryoutStatus.OPEN, TryoutStatus.PAUSED, TryoutStatus.SCHEDULED, TryoutStatus.ENDED] } },
+    where: {
+      author: { is: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } } },
+      status: { in: [TryoutStatus.OPEN, TryoutStatus.PAUSED, TryoutStatus.SCHEDULED, TryoutStatus.ENDED] },
+    },
     include: {
       attempts: { include: { user: true }, orderBy: { startedAt: 'desc' } },
       incidents: true,

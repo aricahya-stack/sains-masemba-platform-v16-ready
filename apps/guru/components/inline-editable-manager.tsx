@@ -366,7 +366,7 @@ export function InlineEditableManager({
                             <button className="button-secondary" type="button" onClick={() => pick(row)}>
                               <Pencil size={15} /> {row._readOnly === 'true' ? 'Lihat' : 'Edit'}
                             </button>
-                            <button className="button-danger" type="button" onClick={() => remove(row)} disabled={loading || row._persisted === 'false' || row._readOnly === 'true'}>
+                            <button className="button-danger" type="button" onClick={() => remove(row)} disabled={loading || row._persisted === 'false' || row._readOnly === 'true' || row._deleteDisabled === 'true'}>
                               <Trash2 size={15} /> Hapus
                             </button>
                           </div>

@@ -45,15 +45,15 @@ export default async function Page() {
           },
         ],
       } }),
-    prisma.tryout.count({ where: { authorId: user.id } }),
-    prisma.attempt.count({ where: { tryout: { authorId: user.id } } }),
+    prisma.tryout.count({ where: { author: { is: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } } } } }),
+    prisma.attempt.count({ where: { tryout: { author: { is: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } } } } } }),
   ]);
 
   const stats = [
     { label: 'Materi saya', value: String(materials), note: 'Topik dan materi diedit dalam satu tabel.', badge: 'Konten' },
     { label: 'Soal latihan', value: String(practiceQuestions), note: 'Latihan tersedia di dalam materi siswa.', badge: 'Latihan' },
-    { label: 'Soal tryout', value: String(tryoutQuestions), note: 'Kisi-kisi dan soal berada dalam satu tabel.', badge: 'Tryout' },
-    { label: 'Jadwal tryout', value: String(tryouts), note: 'Paket 30 soal dapat dijadwalkan.', badge: 'Ujian' },
+    { label: 'Soal tryout', value: String(tryoutQuestions), note: 'Bank soal tryout digunakan bersama seluruh guru.', badge: 'Tryout' },
+    { label: 'Jadwal tryout', value: String(tryouts), note: 'Jadwal tryout dapat dikelola bersama seluruh guru.', badge: 'Ujian' },
   ];
 
   const cards = [

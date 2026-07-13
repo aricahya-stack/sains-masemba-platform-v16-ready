@@ -3,10 +3,10 @@ import { calculateTryoutStatistics, requireRole } from '@sh/core';
 import { TryoutStatisticsPanel } from '../../components/tryout-statistics-panel';
 
 export default async function StatistikTryoutGuruPage({ searchParams }: { searchParams: Promise<{ tryout?: string }> }) {
-  const user = await requireRole(UserRole.GURU);
+  await requireRole(UserRole.GURU);
   const params = await searchParams;
   const tryouts = await prisma.tryout.findMany({
-    where: { authorId: user.id },
+    where: { author: { is: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } } } },
     include: {
       attempts: {
         where: { submittedAt: { not: null } },
@@ -27,7 +27,7 @@ export default async function StatistikTryoutGuruPage({ searchParams }: { search
     <TryoutStatisticsPanel
       eyebrow="Ujian • Statistik Tryout"
       title="Statistik deskriptif pengerjaan tryout"
-      description="Analisis distribusi seluruh percobaan siswa untuk setiap tryout yang Anda kelola. Satu siswa dapat mengulang tryout, tetapi data antartryout tidak pernah digabungkan."
+      description="Analisis distribusi seluruh percobaan siswa untuk setiap tryout pada bank bersama guru. Satu siswa dapat mengulang tryout, tetapi data antartryout tidak pernah digabungkan."
       tryouts={tryouts.map((item) => ({ id: item.id, title: item.title, subtitle: `${item._count.questions} soal • ${item.attempts.length} percobaan selesai` }))}
       selectedTryoutId={selected?.id || ''}
       statistics={statistics}

@@ -134,10 +134,11 @@ async function resolveDisplayTopic(
   return sourceByTitle || topic;
 }
 
-async function serialize(questionId: string) {
+async function serialize(questionId: string, viewerId = '') {
   const question = await prisma.question.findUniqueOrThrow({
     where: { id: questionId },
     include: {
+      author: { select: { id: true, fullName: true, role: true } },
       topic: true,
       blueprint: true,
       options: { orderBy: { label: 'asc' } },
@@ -152,6 +153,9 @@ async function serialize(questionId: string) {
   return {
     id: question.id,
     _persisted: 'true',
+    _readOnly: 'false',
+    _deleteDisabled: question.authorId === viewerId ? 'false' : 'true',
+    sourceOwner: `Dibuat oleh ${question.author.fullName}${question.author.role === UserRole.SUPER_ADMIN ? ' (Super Admin)' : ' (Guru)'} • dapat diedit semua guru`,
     testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
     tryoutCode,
     blueprintId: blueprint?.id || '',
@@ -294,7 +298,7 @@ export async function POST(request: Request) {
       });
       return created;
     });
-    return NextResponse.json({ data: await serialize(question.id) });
+    return NextResponse.json({ data: await serialize(question.id, user.id) });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Gagal menyimpan data tryout.' }, { status: 400 });
   }
@@ -306,11 +310,27 @@ export async function PUT(request: Request) {
   const body = (await request.json()) as Record<string, unknown>;
   const questionId = String(body.id || '');
   if (!questionId) return NextResponse.json({ error: 'ID soal wajib ada.' }, { status: 400 });
-  const owned = await prisma.question.findUnique({
-    where: { id: questionId },
+  const target = await prisma.question.findFirst({
+    where: {
+      id: questionId,
+      author: { is: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } } },
+      OR: [
+        { tryoutQuestions: { some: {} } },
+        {
+          blueprint: {
+            is: {
+              OR: [
+                { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
+                { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+              ],
+            },
+          },
+        },
+      ],
+    },
     include: { tryoutQuestions: { include: { tryout: { select: { authorId: true } } } } },
   });
-  if (!owned || owned.authorId !== user.id) {
+  if (!target) {
     return NextResponse.json({ error: 'Soal tryout tidak ditemukan.' }, { status: 404 });
   }
 
@@ -319,11 +339,11 @@ export async function PUT(request: Request) {
     const options = buildOptions(body);
     const blueprintCode = String(body.blueprintCode).trim();
     await prisma.$transaction(async (tx) => {
-      const previousTopicId = owned.topicId;
+      const previousTopicId = target.topicId;
       const topic = await resolveTryoutTopic(tx, body);
-      const blueprint = owned.blueprintId
+      const blueprint = target.blueprintId
         ? await tx.blueprint.update({
-            where: { id: owned.blueprintId },
+            where: { id: target.blueprintId },
             data: { code: blueprintCode, ...blueprintData(body, topic.id) },
           })
         : await tx.blueprint.upsert({
@@ -336,7 +356,7 @@ export async function PUT(request: Request) {
       await tx.questionOption.createMany({ data: options.map((option) => ({ questionId, ...option })) });
       if (previousTopicId !== topic.id) await cleanupTopicIfUnused(tx, previousTopicId);
     });
-    return NextResponse.json({ data: await serialize(questionId) });
+    return NextResponse.json({ data: await serialize(questionId, user.id) });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Gagal memperbarui data tryout.' }, { status: 400 });
   }
@@ -351,8 +371,11 @@ export async function DELETE(request: Request) {
     where: { id: questionId },
     include: { tryoutQuestions: { include: { tryout: { select: { authorId: true } } } } },
   });
-  if (!owned || owned.authorId !== user.id) {
+  if (!owned) {
     return NextResponse.json({ error: 'Soal tryout tidak ditemukan.' }, { status: 404 });
+  }
+  if (owned.authorId !== user.id) {
+    return NextResponse.json({ error: 'Soal dapat diedit bersama, tetapi hanya pembuat soal yang dapat menghapusnya.' }, { status: 403 });
   }
 
   try {

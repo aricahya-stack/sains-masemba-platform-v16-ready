@@ -17,10 +17,7 @@ export default async function MappingTryoutPage() {
       where: {
         AND: [
           {
-            OR: [
-              { authorId: user.id },
-              { author: { is: { role: UserRole.SUPER_ADMIN } } },
-            ],
+            author: { is: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } } },
           },
           {
             blueprint: {
@@ -38,8 +35,9 @@ export default async function MappingTryoutPage() {
       orderBy: [{ authorId: 'asc' }, { stimulusOrder: 'asc' }, { code: 'asc' }],
     }),
     prisma.tryout.findMany({
-      where: { authorId: user.id },
+      where: { author: { is: { role: { in: [UserRole.GURU, UserRole.SUPER_ADMIN] } } } },
       include: {
+        author: { select: { id: true, fullName: true, role: true } },
         questions: {
           include: { question: { include: { blueprint: true, author: { select: { fullName: true } } } } },
           orderBy: { orderNo: 'asc' },
@@ -62,7 +60,9 @@ export default async function MappingTryoutPage() {
       tryoutCode,
       groupName,
       sourceAuthorId: question.authorId,
-      sourceOwner: question.authorId === user.id ? 'Konten guru sendiri' : `Konten pusat • ${question.author.fullName}`,
+      sourceOwner: question.author.role === UserRole.SUPER_ADMIN
+        ? `Konten pusat • ${question.author.fullName}`
+        : `Konten guru • ${question.author.fullName}`,
       questionCodes: [],
     };
     if (!current.questionCodes.includes(question.code)) current.questionCodes.push(question.code);
@@ -78,16 +78,14 @@ export default async function MappingTryoutPage() {
     const currentComplete = current?.questionCodes.length === 30;
     const shouldReplace = !current
       || (candidateComplete && !currentComplete)
+      || (candidateComplete === currentComplete && candidate.questionCodes.length > current.questionCodes.length)
       || (candidateComplete === currentComplete
-        && candidate.sourceAuthorId === user.id
-        && current.sourceAuthorId !== user.id)
-      || (candidateComplete === currentComplete
-        && candidate.sourceAuthorId === current.sourceAuthorId
-        && candidate.questionCodes.length > current.questionCodes.length);
+        && candidate.questionCodes.length === current.questionCodes.length
+        && candidate.sourceOwner.localeCompare(current.sourceOwner, 'id') < 0);
     if (shouldReplace) groups.set(candidate.tryoutCode, candidate);
   }
 
-  // Paket lama milik guru tetap ditampilkan walaupun sumber blueprint-nya belum memakai format terbaru.
+  // Paket lama seluruh guru tetap ditampilkan walaupun sumber blueprint-nya belum memakai format terbaru.
   for (const tryout of tryouts) {
     const firstBlueprint = tryout.questions.map((row) => row.question.blueprint).find(Boolean);
     const tryoutCode = tryoutCodeFromPeriodCode(firstBlueprint?.periodCode, firstBlueprint?.testGroup || tryout.title);
@@ -96,7 +94,7 @@ export default async function MappingTryoutPage() {
     groups.set(tryoutCode, {
       tryoutCode,
       groupName: firstBlueprint?.testGroup?.trim() || tryout.title,
-      sourceAuthorId: user.id,
+      sourceAuthorId: tryout.authorId,
       sourceOwner: sourceAuthor?.fullName ? `Paket lama • ${sourceAuthor.fullName}` : 'Paket lama',
       questionCodes: tryout.questions.map((row) => row.question.code),
     });
@@ -105,7 +103,8 @@ export default async function MappingTryoutPage() {
   const fields: InlineFieldDef[] = [
     { name: 'tryoutCode', label: 'Kode tryout', readOnly: true },
     { name: 'sourceGroup', label: 'Sumber data tryout', readOnly: true },
-    { name: 'sourceOwner', label: 'Pemilik sumber soal', readOnly: true },
+    { name: 'sourceOwner', label: 'Pembuat sumber soal', readOnly: true },
+    { name: 'scheduleOwner', label: 'Pembuat jadwal', readOnly: true },
     { name: 'title', label: 'Judul tryout untuk siswa' },
     { name: 'description', label: 'Deskripsi', type: 'richtext', full: true },
     { name: 'durationMinutes', label: 'Durasi (menit)', type: 'number' },
@@ -127,9 +126,14 @@ export default async function MappingTryoutPage() {
     return {
       id: existing?.id || `group:${encodeURIComponent(tryoutCode)}`,
       _persisted: existing ? 'true' : 'false',
+      _readOnly: 'false',
+      _deleteDisabled: existing && existing.authorId !== user.id ? 'true' : 'false',
       tryoutCode,
       sourceGroup: groupName,
       sourceOwner,
+      scheduleOwner: existing
+        ? `Dibuat oleh ${existing.author.fullName}${existing.author.role === UserRole.SUPER_ADMIN ? ' (Super Admin)' : ' (Guru)'}`
+        : 'Belum dijadwalkan',
       importedGroup: tryoutCode,
       title: existing?.title || groupName,
       description: existing?.description || '',
@@ -152,7 +156,7 @@ export default async function MappingTryoutPage() {
     <InlineEditableManager
       eyebrow="Ujian • Mapping Tryout"
       title="Mapping dan penjadwalan tryout"
-      description="Mapping membaca seluruh soal tryout milik guru dan konten pusat tanpa menyaring status soal. Artinya, paket berisi tepat 30 soal tetap dapat dijadwalkan walaupun soalnya masih berstatus DRAFT. Soal latihan tidak ikut terbaca karena sumbernya wajib memakai namespace blueprint tryout."
+      description="Mapping dan jadwal tryout digunakan bersama oleh seluruh guru. Setiap guru dapat menjadwalkan maupun mengubah jadwal yang sudah dibuat guru lain. Soal DRAFT tetap dapat dipetakan selama paket berisi tepat 30 soal; soal latihan tidak ikut terbaca karena sumbernya wajib memakai namespace blueprint tryout."
       entityName="jadwal tryout"
       endpoint="/api/tryouts"
       fields={fields}
@@ -162,7 +166,8 @@ export default async function MappingTryoutPage() {
       tableColumns={[
         { key: 'tryoutCode', label: 'Kode tryout' },
         { key: 'sourceGroup', label: 'Paket sumber' },
-        { key: 'sourceOwner', label: 'Pemilik sumber' },
+        { key: 'sourceOwner', label: 'Pembuat soal' },
+        { key: 'scheduleOwner', label: 'Pembuat jadwal' },
         { key: 'questionCount', label: 'Jumlah soal' },
         { key: 'mappingStatus', label: 'Kesiapan' },
         { key: 'status', label: 'Status ujian' },
