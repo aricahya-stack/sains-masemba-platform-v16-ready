@@ -1,24 +1,44 @@
-import { prisma, UserRole } from '@sh/db';
-import { isInternalTryoutTopicSlug, requireRole, tryoutCodeFromPeriodCode } from '@sh/core';
+import { prisma, PublishStatus, UserRole } from '@sh/db';
+import {
+  isInternalTryoutTopicSlug,
+  requireRole,
+  sourceTopicSlugFromInternalTryoutTopicSlug,
+  tryoutCodeFromPeriodCode,
+} from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
+function formatTopicLabel(topic: { orderNo: number; title: string }) {
+  return `${topic.orderNo}. ${topic.title}`;
+}
+
 export default async function TryoutPage() {
-  await requireRole(UserRole.GURU);
+  const user = await requireRole(UserRole.GURU);
   const [topics, questions] = await Promise.all([
-    prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
+    prisma.topic.findMany({
+      where: {
+        materials: { some: { status: PublishStatus.PUBLISHED } },
+        NOT: { slug: { startsWith: '__tryout__-' } },
+      },
+      orderBy: [{ orderNo: 'asc' }, { title: 'asc' }],
+    }),
     prisma.question.findMany({
       where: {
-        OR: [
-          { tryoutQuestions: { some: {} } },
+        AND: [
+          { authorId: user.id },
           {
-            blueprint: {
-              is: {
-                OR: [
-                  { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
-                  { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
-                ],
+            OR: [
+              { tryoutQuestions: { some: {} } },
+              {
+                blueprint: {
+                  is: {
+                    OR: [
+                      { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
+                      { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+                    ],
+                  },
+                },
               },
-            },
+            ],
           },
         ],
       },
@@ -32,10 +52,8 @@ export default async function TryoutPage() {
     }),
   ]);
 
-  const tryoutTopics = topics.map((topic) => ({
-    ...topic,
-    optionLabel: `${isInternalTryoutTopicSlug(topic.slug) ? '[Tryout]' : '[Materi]'} ${topic.title} (${topic.slug})`,
-  }));
+  const topicsById = new Map(topics.map((topic) => [topic.id, topic]));
+  const topicsBySlug = new Map(topics.map((topic) => [topic.slug.toLowerCase(), topic]));
 
   const sortedQuestions = [...questions].sort((left, right) => {
     const groupCompare = (left.blueprint?.testGroup || '').localeCompare(right.blueprint?.testGroup || '', 'id');
@@ -48,7 +66,12 @@ export default async function TryoutPage() {
     { name: 'tryoutCode', label: 'Kode tryout' },
     { name: 'testGroup', label: 'Nama kelompok tryout' },
     { name: 'blueprintCode', label: 'Kode kisi-kisi' },
-    { name: 'topicId', label: 'Topik internal tryout', type: 'select', options: tryoutTopics.map((topic) => ({ value: topic.id, label: topic.optionLabel })) },
+    {
+      name: 'topicId',
+      label: 'Topik tryout (mengacu topik belajar)',
+      type: 'select',
+      options: topics.map((topic) => ({ value: topic.id, label: formatTopicLabel(topic) })),
+    },
     { name: 'competency', label: 'Kompetensi', type: 'richtext', full: true },
     { name: 'indicator', label: 'Indikator', type: 'richtext', full: true },
     { name: 'materialName', label: 'Nama materi pada kisi-kisi' },
@@ -83,24 +106,33 @@ export default async function TryoutPage() {
   const initialRows = sortedQuestions.map((question) => {
     const blueprint = question.blueprint;
     const mappedTryout = question.tryoutQuestions[0]?.tryout;
+    const tryoutCode = tryoutCodeFromPeriodCode(
+      blueprint?.periodCode,
+      blueprint?.testGroup || mappedTryout?.title || 'Tryout',
+    );
+    const sourceSlug = sourceTopicSlugFromInternalTryoutTopicSlug(question.topic.slug, tryoutCode);
+    const sourceTopic = !isInternalTryoutTopicSlug(question.topic.slug)
+      ? topicsById.get(question.topicId) || topicsBySlug.get(question.topic.slug.toLowerCase())
+      : topicsBySlug.get(sourceSlug)
+        || topics.find((topic) => topic.title.toLowerCase() === question.topic.title.toLowerCase());
     const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
     return {
       id: question.id,
       _persisted: 'true',
       testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
-      tryoutCode: tryoutCodeFromPeriodCode(blueprint?.periodCode, blueprint?.testGroup || mappedTryout?.title || 'Tryout'),
+      tryoutCode,
       blueprintId: blueprint?.id || '',
       blueprintCode: blueprint?.code || `LEGACY-${question.code}`,
       competency: blueprint?.competency || 'Kompetensi belum dicatat pada data lama',
       indicator: blueprint?.indicator || 'Indikator belum dicatat pada data lama',
-      materialName: blueprint?.materialName || question.topic.title,
+      materialName: blueprint?.materialName || sourceTopic?.title || question.topic.title,
       cognitiveLevel: blueprint?.cognitiveLevel || '',
       targetDifficulty: blueprint?.targetDifficulty || question.difficulty || '',
       targetQuestionCount: String(blueprint?.targetQuestionCount || 1),
       blueprintText: blueprint?.blueprintText || (mappedTryout ? `Terhubung ke ${mappedTryout.title}` : ''),
       code: question.code,
-      topicId: question.topicId,
-      topicLabel: question.topic.title,
+      topicId: sourceTopic?.id || '',
+      topicLabel: sourceTopic ? formatTopicLabel(sourceTopic) : question.topic.title,
       difficulty: question.difficulty || '',
       status: question.status,
       stimulusOrder: String(question.stimulusOrder),
@@ -124,7 +156,7 @@ export default async function TryoutPage() {
     <InlineEditableManager
       eyebrow="Ujian • Tryout"
       title="Data tryout: kisi-kisi dan soal"
-      description="Setiap baris memuat kisi-kisi sekaligus soal tryout. Data lama dimuat berdasarkan relasi paket Tryout, sedangkan data impor baru tetap dikelompokkan melalui kisi-kisi. Paket baru dirancang berisi tepat 30 soal. Seluruh konten dapat diedit langsung di tabel dengan WYSIWYG."
+      description="Pilihan topik memakai daftar topik belajar yang sama seperti Soal Latihan. Di database, soal tryout tetap ditempatkan pada topik internal khusus agar tidak tercampur dengan soal latihan. Status DRAFT tetap dapat masuk ke Mapping Tryout."
       entityName="data tryout"
       endpoint="/api/tryout-content"
       fields={fields}

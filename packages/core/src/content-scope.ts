@@ -58,6 +58,18 @@ export function isInternalTryoutTopicSlug(value: unknown) {
   return String(value ?? '').trim().toLowerCase().startsWith(TRYOUT_TOPIC_PREFIX);
 }
 
+/**
+ * Mengambil kembali slug topik belajar asal dari slug topik internal tryout.
+ * Contoh: __tryout__-tryout-01-sistem-pernapasan -> sistem-pernapasan.
+ */
+export function sourceTopicSlugFromInternalTryoutTopicSlug(value: unknown, tryoutCode: unknown) {
+  const internalSlug = String(value ?? '').trim().toLowerCase();
+  if (!isInternalTryoutTopicSlug(internalSlug)) return internalSlug;
+  const packagePart = slugify(normalizeTryoutCode(tryoutCode));
+  const expectedPrefix = `${TRYOUT_TOPIC_PREFIX}${packagePart}-`;
+  return internalSlug.startsWith(expectedPrefix) ? internalSlug.slice(expectedPrefix.length) : '';
+}
+
 export function isTryoutBlueprintLike(blueprint: {
   periodCode?: string | null;
   testGroup?: string | null;

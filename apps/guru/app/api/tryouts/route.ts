@@ -67,6 +67,7 @@ async function resolveQuestions(
       code: { in: codes },
       OR: [
         { authorId },
+        { author: { is: { role: UserRole.SUPER_ADMIN } } },
         { tryoutQuestions: { some: { tryout: { authorId } } } },
       ],
     },
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
   try {
     const data = tryoutData(body);
     if (!data.title) throw new Error('Judul tryout wajib diisi.');
+    // Status soal (termasuk DRAFT) tidak membatasi penjadwalan; yang wajib adalah tepat 30 soal valid.
     const requireThirty = Boolean(body.sourceGroup);
     const questions = await resolveQuestions(user.id, String(body.questionCodes || ''), requireThirty, String(body.tryoutCode || body.sourceGroup || ''));
     const item = await prisma.$transaction(async (tx) => {

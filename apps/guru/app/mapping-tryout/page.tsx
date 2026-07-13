@@ -5,6 +5,8 @@ import { InlineEditableManager, type InlineFieldDef } from '../../components/inl
 type MappingGroup = {
   tryoutCode: string;
   groupName: string;
+  sourceAuthorId: string;
+  sourceOwner: string;
   questionCodes: string[];
 };
 
@@ -13,24 +15,33 @@ export default async function MappingTryoutPage() {
   const [questions, tryouts] = await Promise.all([
     prisma.question.findMany({
       where: {
-        authorId: user.id,
-        blueprint: {
-          is: {
+        AND: [
+          {
             OR: [
-              { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
-              { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+              { authorId: user.id },
+              { author: { is: { role: UserRole.SUPER_ADMIN } } },
             ],
           },
-        },
+          {
+            blueprint: {
+              is: {
+                OR: [
+                  { periodCode: { startsWith: 'TRYOUT_CONTENT' } },
+                  { testGroup: { startsWith: 'Tryout', mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        ],
       },
-      include: { blueprint: true },
-      orderBy: [{ stimulusOrder: 'asc' }, { code: 'asc' }],
+      include: { blueprint: true, author: { select: { id: true, fullName: true, role: true } } },
+      orderBy: [{ authorId: 'asc' }, { stimulusOrder: 'asc' }, { code: 'asc' }],
     }),
     prisma.tryout.findMany({
       where: { authorId: user.id },
       include: {
         questions: {
-          include: { question: { include: { blueprint: true } } },
+          include: { question: { include: { blueprint: true, author: { select: { fullName: true } } } } },
           orderBy: { orderNo: 'asc' },
         },
       },
@@ -38,29 +49,55 @@ export default async function MappingTryoutPage() {
     }),
   ]);
 
-  const groups = new Map<string, MappingGroup>();
+  const candidates = new Map<string, MappingGroup>();
 
-  // Sumber utama mapping adalah soal hasil import terbaru.
-  // Dengan urutan ini, re-import paket yang sama tidak menggabungkan 30 soal lama
-  // dengan 30 soal baru menjadi 31+ soal.
+  // Soal berstatus DRAFT, REVIEW, maupun PUBLISHED tetap dibaca.
+  // Pemisahan paket didasarkan pada kode tryout + pemilik sumber agar kode yang sama tidak tercampur.
   for (const question of questions) {
     const groupName = question.blueprint?.testGroup?.trim();
     if (!groupName) continue;
     const tryoutCode = tryoutCodeFromPeriodCode(question.blueprint?.periodCode, groupName);
-    const current = groups.get(tryoutCode) || { tryoutCode, groupName, questionCodes: [] };
+    const candidateKey = `${question.authorId}::${tryoutCode}`;
+    const current = candidates.get(candidateKey) || {
+      tryoutCode,
+      groupName,
+      sourceAuthorId: question.authorId,
+      sourceOwner: question.authorId === user.id ? 'Konten guru sendiri' : `Konten pusat • ${question.author.fullName}`,
+      questionCodes: [],
+    };
     if (!current.questionCodes.includes(question.code)) current.questionCodes.push(question.code);
-    groups.set(tryoutCode, current);
+    candidates.set(candidateKey, current);
   }
 
-  // Paket lama yang belum lagi memiliki sumber soal import tetap ditampilkan,
-  // tetapi tidak menimpa isi paket import terbaru dengan kode yang sama.
+  // Untuk kode yang sama, paket lengkap 30 soal diprioritaskan. Jika tingkat kelengkapannya sama,
+  // konten milik guru dipilih lebih dahulu daripada konten pusat.
+  const groups = new Map<string, MappingGroup>();
+  for (const candidate of candidates.values()) {
+    const current = groups.get(candidate.tryoutCode);
+    const candidateComplete = candidate.questionCodes.length === 30;
+    const currentComplete = current?.questionCodes.length === 30;
+    const shouldReplace = !current
+      || (candidateComplete && !currentComplete)
+      || (candidateComplete === currentComplete
+        && candidate.sourceAuthorId === user.id
+        && current.sourceAuthorId !== user.id)
+      || (candidateComplete === currentComplete
+        && candidate.sourceAuthorId === current.sourceAuthorId
+        && candidate.questionCodes.length > current.questionCodes.length);
+    if (shouldReplace) groups.set(candidate.tryoutCode, candidate);
+  }
+
+  // Paket lama milik guru tetap ditampilkan walaupun sumber blueprint-nya belum memakai format terbaru.
   for (const tryout of tryouts) {
     const firstBlueprint = tryout.questions.map((row) => row.question.blueprint).find(Boolean);
     const tryoutCode = tryoutCodeFromPeriodCode(firstBlueprint?.periodCode, firstBlueprint?.testGroup || tryout.title);
     if (groups.has(tryoutCode)) continue;
+    const sourceAuthor = tryout.questions[0]?.question.author;
     groups.set(tryoutCode, {
       tryoutCode,
       groupName: firstBlueprint?.testGroup?.trim() || tryout.title,
+      sourceAuthorId: user.id,
+      sourceOwner: sourceAuthor?.fullName ? `Paket lama • ${sourceAuthor.fullName}` : 'Paket lama',
       questionCodes: tryout.questions.map((row) => row.question.code),
     });
   }
@@ -68,6 +105,7 @@ export default async function MappingTryoutPage() {
   const fields: InlineFieldDef[] = [
     { name: 'tryoutCode', label: 'Kode tryout', readOnly: true },
     { name: 'sourceGroup', label: 'Sumber data tryout', readOnly: true },
+    { name: 'sourceOwner', label: 'Pemilik sumber soal', readOnly: true },
     { name: 'title', label: 'Judul tryout untuk siswa' },
     { name: 'description', label: 'Deskripsi', type: 'richtext', full: true },
     { name: 'durationMinutes', label: 'Durasi (menit)', type: 'number' },
@@ -77,7 +115,7 @@ export default async function MappingTryoutPage() {
     { name: 'rulesHtml', label: 'Aturan ujian', type: 'richtext', full: true },
   ];
 
-  const initialRows = Array.from(groups.values()).map(({ tryoutCode, groupName, questionCodes }) => {
+  const initialRows = Array.from(groups.values()).map(({ tryoutCode, groupName, sourceOwner, questionCodes }) => {
     const expectedCodes = [...questionCodes].sort().join('|');
     const existing = tryouts.find((tryout) => {
       const firstBlueprint = tryout.questions.map((row) => row.question.blueprint).find(Boolean);
@@ -91,6 +129,7 @@ export default async function MappingTryoutPage() {
       _persisted: existing ? 'true' : 'false',
       tryoutCode,
       sourceGroup: groupName,
+      sourceOwner,
       importedGroup: tryoutCode,
       title: existing?.title || groupName,
       description: existing?.description || '',
@@ -101,7 +140,11 @@ export default async function MappingTryoutPage() {
       rulesHtml: existing?.rulesHtml || '',
       questionCodes: questionCodes.join('\n'),
       questionCount: String(questionCodes.length),
-      mappingStatus: existing ? 'Sudah dijadwalkan' : questionCodes.length === 30 ? 'Siap dijadwalkan' : `Belum lengkap (${questionCodes.length}/30)`,
+      mappingStatus: existing
+        ? 'Sudah dijadwalkan'
+        : questionCodes.length === 30
+          ? 'Siap dijadwalkan • DRAFT diperbolehkan'
+          : `Belum lengkap (${questionCodes.length}/30)`,
     };
   });
 
@@ -109,7 +152,7 @@ export default async function MappingTryoutPage() {
     <InlineEditableManager
       eyebrow="Ujian • Mapping Tryout"
       title="Mapping dan penjadwalan tryout"
-      description="Paket kini dikelompokkan berdasarkan kode tryout, bukan nama topik atau nama materi. Konten tryout tetap terpisah dari topik belajar siswa dan hanya paket berisi tepat 30 soal yang dapat dijadwalkan."
+      description="Mapping membaca seluruh soal tryout milik guru dan konten pusat tanpa menyaring status soal. Artinya, paket berisi tepat 30 soal tetap dapat dijadwalkan walaupun soalnya masih berstatus DRAFT. Soal latihan tidak ikut terbaca karena sumbernya wajib memakai namespace blueprint tryout."
       entityName="jadwal tryout"
       endpoint="/api/tryouts"
       fields={fields}
@@ -118,7 +161,8 @@ export default async function MappingTryoutPage() {
       tableTitle="Tabel mapping dan jadwal tryout"
       tableColumns={[
         { key: 'tryoutCode', label: 'Kode tryout' },
-        { key: 'sourceGroup', label: 'Paket impor' },
+        { key: 'sourceGroup', label: 'Paket sumber' },
+        { key: 'sourceOwner', label: 'Pemilik sumber' },
         { key: 'questionCount', label: 'Jumlah soal' },
         { key: 'mappingStatus', label: 'Kesiapan' },
         { key: 'status', label: 'Status ujian' },

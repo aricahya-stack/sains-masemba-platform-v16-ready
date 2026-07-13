@@ -5,6 +5,7 @@ import {
   isInternalTryoutTopicSlug,
   makeInternalTryoutTopicSlug,
   normalizeTryoutCode,
+  sourceTopicSlugFromInternalTryoutTopicSlug,
   toFloat,
   toInt,
   toTryoutPeriodCode,
@@ -114,6 +115,35 @@ function correctAnswers(questionType: QuestionType, options: Array<{ label: stri
     : options.filter((option) => option.isCorrect).map((option) => option.label).join(',');
 }
 
+async function resolveDisplayTopic(
+  topic: { id: string; title: string; slug: string; orderNo: number },
+  blueprint: { periodCode: string | null; testGroup: string | null } | null,
+  fallbackTryoutTitle: string,
+) {
+  if (!isInternalTryoutTopicSlug(topic.slug)) return topic;
+  const tryoutCode = tryoutCodeFromPeriodCode(blueprint?.periodCode, blueprint?.testGroup || fallbackTryoutTitle);
+  const sourceSlug = sourceTopicSlugFromInternalTryoutTopicSlug(topic.slug, tryoutCode);
+  const sourceBySlug = sourceSlug
+    ? await prisma.topic.findFirst({
+        where: {
+          slug: sourceSlug,
+          materials: { some: { status: PublishStatus.PUBLISHED } },
+          NOT: { slug: { startsWith: '__tryout__-' } },
+        },
+      })
+    : null;
+  if (sourceBySlug) return sourceBySlug;
+  const sourceByTitle = await prisma.topic.findFirst({
+    where: {
+      title: { equals: topic.title, mode: 'insensitive' },
+      materials: { some: { status: PublishStatus.PUBLISHED } },
+      NOT: { slug: { startsWith: '__tryout__-' } },
+    },
+    orderBy: [{ orderNo: 'asc' }, { title: 'asc' }],
+  });
+  return sourceByTitle || topic;
+}
+
 async function serialize(questionId: string) {
   const question = await prisma.question.findUniqueOrThrow({
     where: { id: questionId },
@@ -127,6 +157,8 @@ async function serialize(questionId: string) {
   });
   const mappedTryout = question.tryoutQuestions[0]?.tryout;
   const blueprint = question.blueprint;
+  const tryoutCode = tryoutCodeFromPeriodCode(blueprint?.periodCode, blueprint?.testGroup || mappedTryout?.title || 'Tryout');
+  const displayTopic = await resolveDisplayTopic(question.topic, blueprint, mappedTryout?.title || 'Tryout');
   const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
   return {
     id: question.id,
@@ -134,19 +166,19 @@ async function serialize(questionId: string) {
     authorId: question.authorId,
     authorLabel: question.author.fullName,
     testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
-    tryoutCode: tryoutCodeFromPeriodCode(blueprint?.periodCode, blueprint?.testGroup || mappedTryout?.title || 'Tryout'),
+    tryoutCode,
     blueprintId: blueprint?.id || '',
     blueprintCode: blueprint?.code || `LEGACY-${question.code}`,
     competency: blueprint?.competency || 'Kompetensi belum dicatat pada data lama',
     indicator: blueprint?.indicator || 'Indikator belum dicatat pada data lama',
-    materialName: blueprint?.materialName || question.topic.title,
+    materialName: blueprint?.materialName || displayTopic.title,
     cognitiveLevel: blueprint?.cognitiveLevel || '',
     targetDifficulty: blueprint?.targetDifficulty || question.difficulty || '',
     targetQuestionCount: String(blueprint?.targetQuestionCount || 1),
     blueprintText: blueprint?.blueprintText || (mappedTryout ? `Terhubung ke ${mappedTryout.title}` : ''),
     code: question.code,
-    topicId: question.topicId,
-    topicLabel: question.topic.title,
+    topicId: displayTopic.id,
+    topicLabel: `${displayTopic.orderNo}. ${displayTopic.title}`,
     difficulty: question.difficulty || '',
     status: question.status,
     stimulusOrder: String(question.stimulusOrder),
@@ -204,9 +236,15 @@ async function resolveTryoutTopic(db: any, body: Record<string, unknown>) {
   const sourceTopicId = String(body.topicId || '').trim();
   if (!sourceTopicId) throw new Error('Topik soal tryout wajib dipilih.');
 
-  const sourceTopic = await db.topic.findUnique({ where: { id: sourceTopicId } });
+  const sourceTopic = await db.topic.findUnique({
+    where: { id: sourceTopicId },
+    include: { materials: { where: { status: PublishStatus.PUBLISHED }, select: { id: true }, take: 1 } },
+  });
   if (!sourceTopic) throw new Error('Topik soal tryout tidak ditemukan.');
   if (isInternalTryoutTopicSlug(sourceTopic.slug)) return sourceTopic;
+  if (!sourceTopic.materials.length) {
+    throw new Error('Topik tryout harus berasal dari daftar topik belajar yang memiliki materi PUBLISHED.');
+  }
 
   const testGroup = String(body.testGroup || '').trim();
   const tryoutCode = normalizeTryoutCode(body.tryoutCode, testGroup);

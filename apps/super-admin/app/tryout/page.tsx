@@ -1,5 +1,5 @@
-import { prisma, UserRole } from '@sh/db';
-import { isInternalTryoutTopicSlug, requireRole, tryoutCodeFromPeriodCode } from '@sh/core';
+import { prisma, PublishStatus, UserRole } from '@sh/db';
+import { isInternalTryoutTopicSlug, requireRole, sourceTopicSlugFromInternalTryoutTopicSlug, tryoutCodeFromPeriodCode } from '@sh/core';
 import { InlineEditableManager, type InlineFieldDef } from '../../components/inline-editable-manager';
 
 export default async function TryoutAdminPage() {
@@ -10,7 +10,13 @@ export default async function TryoutAdminPage() {
       orderBy: [{ role: 'asc' }, { fullName: 'asc' }],
       select: { id: true, fullName: true, role: true },
     }),
-    prisma.topic.findMany({ orderBy: [{ orderNo: 'asc' }, { title: 'asc' }] }),
+    prisma.topic.findMany({
+      where: {
+        materials: { some: { status: PublishStatus.PUBLISHED } },
+        NOT: { slug: { startsWith: '__tryout__-' } },
+      },
+      orderBy: [{ orderNo: 'asc' }, { title: 'asc' }],
+    }),
     prisma.question.findMany({
       where: {
         OR: [
@@ -38,10 +44,8 @@ export default async function TryoutAdminPage() {
     }),
   ]);
 
-  const tryoutTopics = topics.map((topic) => ({
-    ...topic,
-    optionLabel: `${isInternalTryoutTopicSlug(topic.slug) ? '[Tryout]' : '[Materi]'} ${topic.title} (${topic.slug})`,
-  }));
+  const topicsById = new Map(topics.map((topic) => [topic.id, topic]));
+  const topicsBySlug = new Map(topics.map((topic) => [topic.slug.toLowerCase(), topic]));
 
   const sortedQuestions = [...questions].sort((left, right) => {
     const authorCompare = left.author.fullName.localeCompare(right.author.fullName, 'id');
@@ -57,7 +61,7 @@ export default async function TryoutAdminPage() {
     { name: 'tryoutCode', label: 'Kode tryout' },
     { name: 'testGroup', label: 'Nama kelompok tryout' },
     { name: 'blueprintCode', label: 'Kode kisi-kisi' },
-    { name: 'topicId', label: 'Topik internal tryout', type: 'select', options: tryoutTopics.map((topic) => ({ value: topic.id, label: topic.optionLabel })) },
+    { name: 'topicId', label: 'Topik tryout (mengacu topik belajar)', type: 'select', options: topics.map((topic) => ({ value: topic.id, label: `${topic.orderNo}. ${topic.title}` })) },
     { name: 'competency', label: 'Kompetensi', type: 'richtext', full: true },
     { name: 'indicator', label: 'Indikator', type: 'richtext', full: true },
     { name: 'materialName', label: 'Nama materi pada kisi-kisi' },
@@ -92,6 +96,12 @@ export default async function TryoutAdminPage() {
   const initialRows = sortedQuestions.map((question) => {
     const blueprint = question.blueprint;
     const mappedTryout = question.tryoutQuestions[0]?.tryout;
+    const tryoutCode = tryoutCodeFromPeriodCode(blueprint?.periodCode, blueprint?.testGroup || mappedTryout?.title || 'Tryout');
+    const sourceSlug = sourceTopicSlugFromInternalTryoutTopicSlug(question.topic.slug, tryoutCode);
+    const sourceTopic = !isInternalTryoutTopicSlug(question.topic.slug)
+      ? topicsById.get(question.topicId) || topicsBySlug.get(question.topic.slug.toLowerCase())
+      : topicsBySlug.get(sourceSlug)
+        || topics.find((topic) => topic.title.toLowerCase() === question.topic.title.toLowerCase());
     const byLabel = Object.fromEntries(question.options.map((option) => [option.label, option.optionText])) as Record<string, string>;
     return {
       id: question.id,
@@ -99,19 +109,19 @@ export default async function TryoutAdminPage() {
       authorId: question.authorId,
       authorLabel: question.author.fullName,
       testGroup: blueprint?.testGroup || mappedTryout?.title || 'Tryout lama',
-      tryoutCode: tryoutCodeFromPeriodCode(blueprint?.periodCode, blueprint?.testGroup || mappedTryout?.title || 'Tryout'),
+      tryoutCode,
       blueprintId: blueprint?.id || '',
       blueprintCode: blueprint?.code || `LEGACY-${question.code}`,
       competency: blueprint?.competency || 'Kompetensi belum dicatat pada data lama',
       indicator: blueprint?.indicator || 'Indikator belum dicatat pada data lama',
-      materialName: blueprint?.materialName || question.topic.title,
+      materialName: blueprint?.materialName || sourceTopic?.title || question.topic.title,
       cognitiveLevel: blueprint?.cognitiveLevel || '',
       targetDifficulty: blueprint?.targetDifficulty || question.difficulty || '',
       targetQuestionCount: String(blueprint?.targetQuestionCount || 1),
       blueprintText: blueprint?.blueprintText || (mappedTryout ? `Terhubung ke ${mappedTryout.title}` : ''),
       code: question.code,
-      topicId: question.topicId,
-      topicLabel: question.topic.title,
+      topicId: sourceTopic?.id || '',
+      topicLabel: sourceTopic ? `${sourceTopic.orderNo}. ${sourceTopic.title}` : question.topic.title,
       difficulty: question.difficulty || '',
       status: question.status,
       stimulusOrder: String(question.stimulusOrder),
@@ -135,7 +145,7 @@ export default async function TryoutAdminPage() {
     <InlineEditableManager
       eyebrow="Ujian • Tryout"
       title="Kelola kisi-kisi dan soal tryout"
-      description="Setiap baris memuat kisi-kisi sekaligus soal. Soal dari paket Tryout lama tetap dimuat meskipun belum memiliki kisi-kisi. Super Admin dapat mengelola paket milik seluruh guru dan mengedit semua bagian langsung di tabel dengan WYSIWYG."
+      description="Pilihan topik tryout memakai daftar topik belajar yang sama seperti Soal Latihan. Penyimpanan tetap menggunakan topik internal khusus agar soal latihan dan soal tryout tidak bercampur."
       entityName="data tryout"
       endpoint="/api/tryout-content"
       fields={fields}
