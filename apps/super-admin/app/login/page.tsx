@@ -31,7 +31,25 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         Aplikasi belajar dan tryout IPA SMP dengan tampilan fokus, rapi, dan mudah digunakan.
       </div>
       <div className="muted auth-credit">
-        Dibuat menggunakan AI oleh <strong>Sinta Herahmawati</strong> dan <strong>Ari Cahya Mawardi</strong>.
+        <div className="auth-credit-title">Pengembang dan validator:</div>
+        <div className="auth-credit-list">
+          <div className="auth-credit-person">
+            <strong>Sinta Herahmawati, S.Pd.</strong>
+            <span>Guru IPA · MTsN 9 Bantul</span>
+          </div>
+          <div className="auth-credit-person">
+            <strong>Muh. Rosyid, S.T.</strong>
+            <span>Guru IPA · MTsN 9 Bantul</span>
+          </div>
+          <div className="auth-credit-person">
+            <strong>Zulisti Sudarojah, S.Pd.I.</strong>
+            <span>Guru IPA · MTsN 9 Bantul</span>
+          </div>
+          <div className="auth-credit-person">
+            <strong>Ari Cahya Mawardi, M.Pd.</strong>
+            <span>Dosen Media Pembelajaran · UIN Sunan Kalijaga Yogyakarta</span>
+          </div>
+        </div>
       </div>
       <div className="auth-copyright">© SH</div>
     </div>

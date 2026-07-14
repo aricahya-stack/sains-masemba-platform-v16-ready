@@ -241,7 +241,12 @@ button:disabled { opacity: .72; cursor: not-allowed; }
 .auth-submit:hover { background: linear-gradient(135deg, color-mix(in srgb, var(--warning) 74%, var(--accent)) 0%, color-mix(in srgb, var(--accent) 88%, black) 100%); }
 .auth-note { padding: 12px 14px; border-radius: 14px; background: var(--surface-muted); border: 1px solid var(--border); color: var(--muted); }
 .error-note { padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--danger) 12%, white); border: 1px solid color-mix(in srgb, var(--danger) 20%, var(--border)); color: var(--danger); }
-.auth-credit { font-size: .92rem; }
+.auth-credit { font-size: .92rem; display:grid; gap:8px; }
+.auth-credit-title { font-weight:800; color:var(--text); }
+.auth-credit-list { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+.auth-credit-person { padding:8px 10px; border:1px solid var(--border); border-radius:12px; background:color-mix(in srgb, var(--surface-muted) 72%, transparent); line-height:1.35; }
+.auth-credit-person strong { display:block; color:var(--text); font-size:.82rem; }
+.auth-credit-person span { display:block; margin-top:2px; font-size:.72rem; }
 .auth-copyright { font-size: .82rem; color: var(--muted); }
 .copyright-badge { position: fixed; right: 18px; bottom: 14px; color: var(--muted); font-weight: 700; }
 .theme-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 14px; }
@@ -289,6 +294,9 @@ button:disabled { opacity: .72; cursor: not-allowed; }
 }
 @media (max-width: 1024px) {
   .grid-2, .grid-3, .grid-4, .template-grid, .exam-shell { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .auth-credit-list { grid-template-columns:1fr; }
 }
 @media (max-width: 768px) {
   .shell, .shell.shell-collapsed { grid-template-columns: 1fr; }
