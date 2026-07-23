@@ -114,6 +114,12 @@ export function AppShell({
   const [collapsed, setCollapsed] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [mode, setMode] = useState<Mode>('light');
+  const userInitials = currentUser?.fullName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'SM';
 
   useEffect(() => {
     const root = document.documentElement;
@@ -289,6 +295,15 @@ export function AppShell({
               <Bell size={16} />
               Notifikasi
             </button>
+            {currentUser ? (
+              <Link href="/profil" prefetch={false} className="topbar-user-chip" aria-label={`Buka profil ${currentUser.fullName}`}>
+                <span className="topbar-user-avatar" aria-hidden="true">{userInitials}</span>
+                <span className="topbar-user-copy">
+                  <strong>{currentUser.fullName}</strong>
+                  <small>{currentUser.role}</small>
+                </span>
+              </Link>
+            ) : null}
           </div>
         </div>
         {children}

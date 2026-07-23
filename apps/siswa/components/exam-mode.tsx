@@ -15,11 +15,10 @@ type ExamQuestion = {
   id: string;
   code: string;
   html: string;
-  explanation: string;
   questionType: 'SINGLE_CHOICE' | 'MULTIPLE_CHOICE' | 'TRUE_FALSE';
   scoringMode: 'EXACT_MATCH' | 'PARTIAL_NO_PENALTY';
   maxScore: number;
-  options: { id: string; label: string; text: string; isCorrect: boolean }[];
+  options: { id: string; label: string; text: string }[];
 };
 
 type FontSize = 'small' | 'normal' | 'large';

@@ -8,9 +8,30 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
   const { id } = await params;
   const tryout = await prisma.tryout.findUnique({
     where: { id },
-    include: {
+    select: {
+      id: true,
+      title: true,
+      durationMinutes: true,
+      status: true,
       questions: {
-        include: { question: { include: { options: { orderBy: { label: 'asc' } } } } },
+        select: {
+          orderNo: true,
+          question: {
+            select: {
+              id: true,
+              code: true,
+              questionText: true,
+              questionHtml: true,
+              questionType: true,
+              scoringMode: true,
+              maxScore: true,
+              options: {
+                select: { id: true, label: true, optionText: true },
+                orderBy: { label: 'asc' },
+              },
+            },
+          },
+        },
         orderBy: { orderNo: 'asc' },
       },
     },
@@ -53,7 +74,6 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
     id: row.question.id,
     code: row.question.code,
     html: row.question.questionHtml || row.question.questionText,
-    explanation: row.question.explanation || '',
     questionType: row.question.questionType,
     scoringMode: row.question.scoringMode,
     maxScore: row.question.maxScore || 1,
@@ -61,7 +81,6 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
       id: option.id,
       label: option.label,
       text: option.optionText,
-      isCorrect: option.isCorrect,
     })),
   }));
 

@@ -2,7 +2,7 @@ import path from 'node:path';
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@sh/db', '@sh/core'],
+  transpilePackages: ['@sh/db', '@sh/core', '@sh/ui'],
   outputFileTracingRoot: path.join(process.cwd(), '../..'),
   serverExternalPackages: ['@prisma/client'],
 };
