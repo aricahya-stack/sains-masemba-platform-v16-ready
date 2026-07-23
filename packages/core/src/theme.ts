@@ -1,5 +1,6 @@
 
 import { prisma } from '@sh/db';
+import { unstable_cache } from 'next/cache';
 
 export const DEFAULT_MOTTO = 'OJO KUMINTER MUNDAK KEBLINGER, OJO CIDRA MUNDAK CILAKA';
 
@@ -37,32 +38,50 @@ export function isThemeKey(value: string): value is ThemeKey {
   return THEME_OPTIONS.some((item) => item.key === value);
 }
 
-async function getSetting(key: string) {
-  try {
-    return await prisma.appSetting.findUnique({ where: { key } });
-  } catch {
-    return null;
-  }
-}
+type BrandingSettings = {
+  theme: ThemeKey;
+  motto: string;
+  font: FontKey;
+};
+
+const getCachedBranding = unstable_cache(
+  async (): Promise<BrandingSettings> => {
+    try {
+      const rows = await prisma.appSetting.findMany({
+        where: { key: { in: ['theme', 'motto', 'font'] } },
+        select: { key: true, value: true },
+      });
+      const settings = new Map(rows.map((row) => [row.key, row.value]));
+
+      const themeValue = settings.get('theme') || '';
+      const theme = (THEME_OPTIONS.find((item) => item.key === themeValue)?.key || 'ocean') as ThemeKey;
+
+      const fontValue = settings.get('font') || '';
+      const font = (FONT_OPTIONS.find((item) => item.key === fontValue)?.key || 'system') as FontKey;
+
+      const motto = settings.get('motto')?.trim() || DEFAULT_MOTTO;
+      return { theme, motto, font };
+    } catch {
+      return { theme: 'ocean', motto: DEFAULT_MOTTO, font: 'system' };
+    }
+  },
+  ['global-branding'],
+  { revalidate: 300, tags: ['global-branding'] },
+);
 
 export async function getActiveTheme(): Promise<ThemeKey> {
-  const setting = await getSetting('theme');
-  const found = THEME_OPTIONS.find((item) => item.key === setting?.value);
-  return (found?.key || 'ocean') as ThemeKey;
+  return (await getCachedBranding()).theme;
 }
 
 export async function getGlobalMotto(): Promise<string> {
-  const setting = await getSetting('motto');
-  return setting?.value?.trim() || DEFAULT_MOTTO;
+  return (await getCachedBranding()).motto;
 }
 
 export async function getActiveFont(): Promise<FontKey> {
-  const setting = await getSetting('font');
-  const found = FONT_OPTIONS.find((item) => item.key === setting?.value);
-  return (found?.key || 'system') as FontKey;
+  return (await getCachedBranding()).font;
 }
 
 export async function getGlobalBranding() {
-  const [theme, motto, font] = await Promise.all([getActiveTheme(), getGlobalMotto(), getActiveFont()]);
-  return { theme, motto, font };
+  return getCachedBranding();
 }
+

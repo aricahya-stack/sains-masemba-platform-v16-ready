@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Sains Masemba Mobile",
+    "slug": "sains-masemba-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#F2F3F7"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#F2F3F7"
+      }
+    }
+  }
+}

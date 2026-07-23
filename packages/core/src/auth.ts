@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { cache } from 'react';
 import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -61,19 +62,20 @@ export async function getSessionPayload() {
   return decodeSession(store.get(SESSION_COOKIE_NAME)?.value);
 }
 
-export async function getCurrentUser() {
+export const getCurrentUser = cache(async function getCurrentUser() {
   const session = await getSessionPayload();
   if (!session) return null;
+
+  // Do not load parent/child relations for every page. Most callers only need
+  // the scalar user fields. React cache deduplicates repeated auth reads made
+  // by the root layout and the page during the same server render.
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    include: {
-      parentChildren: { where: { isActive: true } },
-      childParents: { where: { isActive: true } },
-    },
   });
+
   if (!user || user.status !== 'ACTIVE') return null;
   return user;
-}
+});
 
 export async function requireRole(roles: UserRole | UserRole[]) {
   const user = await getCurrentUser();
