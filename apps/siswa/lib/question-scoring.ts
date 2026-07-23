@@ -9,11 +9,16 @@ export type ScoringOption = {
   isCorrect: boolean;
 };
 
-export type ScoringQuestion = {
+type QuestionWithOptions<TOption extends { id: string }> = {
   questionType?: QuestionType | string;
+  options: TOption[];
+};
+
+export type AnswerableQuestion = QuestionWithOptions<Pick<ScoringOption, 'id'>>;
+
+export type ScoringQuestion = QuestionWithOptions<ScoringOption> & {
   scoringMode?: ScoringMode | string;
   maxScore?: number;
-  options: ScoringOption[];
 };
 
 export type AnswerValue = string | string[] | number | boolean | unknown[] | Record<string, unknown> | null | undefined;
@@ -61,7 +66,7 @@ export function normalizeTrueFalseAnswers(answer: AnswerValue) {
   return result;
 }
 
-export function isAnswered(question: ScoringQuestion, answer: AnswerValue) {
+export function isAnswered(question: AnswerableQuestion, answer: AnswerValue) {
   const type = question.questionType || 'SINGLE_CHOICE';
   if (type === 'TRUE_FALSE') {
     const map = normalizeTrueFalseAnswers(answer);
