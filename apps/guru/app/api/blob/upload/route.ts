@@ -15,7 +15,7 @@ const TYPES: Record<string, { extension: string; matches: (bytes: Uint8Array) =>
 
 export async function POST(request: Request) {
   const user = await getCurrentUser();
-  if (!user || ![UserRole.SUPER_ADMIN, UserRole.GURU].includes(user.role)) {
+  if (!user || (user.role !== UserRole.SUPER_ADMIN && user.role !== UserRole.GURU)) {
     return NextResponse.json({ error: 'Upload hanya tersedia untuk Guru dan Super Admin.' }, { status: 403 });
   }
 
