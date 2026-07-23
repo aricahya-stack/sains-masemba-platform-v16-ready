@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import * as XLSX from 'xlsx';
 import { PageHero } from './page-hero';
 import { useToast } from './toast-provider';
 export function ImportCenter({ eyebrow, title, description, templates }: { eyebrow: string; title: string; description: string; templates: Array<{ title: string; description: string; href: string; code: string }> }) {
@@ -10,6 +9,7 @@ export function ImportCenter({ eyebrow, title, description, templates }: { eyebr
   const onFile = async (file: File | null) => {
     if (!file) return;
     const buffer = await file.arrayBuffer();
+    const XLSX = await import('xlsx');
     const workbook = XLSX.read(buffer, { type: 'array' });
     const firstSheet = workbook.SheetNames[0];
     const sheet = workbook.Sheets[firstSheet];
