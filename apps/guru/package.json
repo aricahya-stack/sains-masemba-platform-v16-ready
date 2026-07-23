@@ -18,7 +18,8 @@
     "react-dom": "^19.0.0",
     "xlsx": "^0.18.5",
     "@sh/core": "*",
-    "@sh/db": "*"
+    "@sh/db": "*",
+    "@sh/ui": "*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
