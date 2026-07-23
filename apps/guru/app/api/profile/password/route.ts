@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCurrentUser, hashPassword, verifyPassword } from '@sh/core';
+import { getCurrentUser, hashPassword, verifyPassword, validatePassword } from '@sh/core';
 import { prisma } from '@sh/db';
 
 export async function POST(request: Request) {
@@ -17,8 +17,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Semua kolom password wajib diisi.' }, { status: 400 });
   }
 
-  if (newPassword.length < 8) {
-    return NextResponse.json({ error: 'Password baru minimal 8 karakter.' }, { status: 400 });
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) {
+    return NextResponse.json({ error: passwordError }, { status: 400 });
   }
 
   if (newPassword !== confirmPassword) {
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash: await hashPassword(newPassword) },
+    data: { passwordHash: await hashPassword(newPassword), authVersion: { increment: 1 } },
   });
 
   return NextResponse.json({ ok: true });

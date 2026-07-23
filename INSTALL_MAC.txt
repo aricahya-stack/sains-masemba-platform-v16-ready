@@ -13,7 +13,7 @@ Branding visual menggunakan identitas **Sains Masemba** dengan ikon sains, pembe
 - Guru: `guru@sh.local`
 - Siswa: `siswa@sh.local`
 - Orang Tua: `orangtua@sh.local`
-- Password semua akun: `Admin123!`
+- Password semua akun: `ditentukan melalui DEFAULT_SEED_PASSWORD`
 
 ## Syarat
 - Node.js 20+ disarankan
@@ -36,7 +36,7 @@ DIRECT_URL="postgresql://USER:PASSWORD@HOST/DBNAME?sslmode=require"
 AUTH_SECRET="ganti-dengan-secret-random"
 BLOB_READ_WRITE_TOKEN=""
 APP_NAME="Sains Masemba"
-DEFAULT_SEED_PASSWORD="Admin123!"
+DEFAULT_SEED_PASSWORD="WAJIB_DIISI_DI_ENV"
 ```
 
 ### Sebarkan env ke package/app

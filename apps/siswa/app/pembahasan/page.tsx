@@ -94,7 +94,7 @@ export default async function PembahasanPage({ searchParams }: { searchParams: P
   }
 
   const attempt = await prisma.attempt.findFirst({
-    where: { id: attemptId, userId: user.id },
+    where: { id: attemptId, userId: user.id, submittedAt: { not: null } },
     include: {
       tryout: {
         include: {

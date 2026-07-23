@@ -1,9 +1,83 @@
 'use client';
 
 import katex from 'katex';
-import { useMemo } from 'react';
+import { useEffect, useState } from 'react';
 
 const DISPLAY_PLACEHOLDER_PREFIX = '%%SAINS_MASEMBA_KATEX_BLOCK_';
+const ALLOWED_TAGS = new Set([
+  'a', 'b', 'blockquote', 'br', 'caption', 'code', 'col', 'colgroup', 'div', 'em', 'figcaption', 'figure',
+  'h1', 'h2', 'h3', 'h4', 'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 's', 'small', 'span', 'strong',
+  'sub', 'sup', 'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'u', 'ul',
+]);
+const DROP_WITH_CONTENT = new Set(['script', 'style', 'iframe', 'object', 'embed', 'template', 'noscript', 'form', 'svg']);
+const GLOBAL_ATTRIBUTES = new Set(['class', 'title']);
+const TAG_ATTRIBUTES: Record<string, Set<string>> = {
+  a: new Set(['href', 'target', 'rel']),
+  img: new Set(['src', 'alt', 'width', 'height', 'loading']),
+  td: new Set(['colspan', 'rowspan']),
+  th: new Set(['colspan', 'rowspan', 'scope']),
+  col: new Set(['span']),
+};
+
+function safeUrl(value: string, type: 'href' | 'src') {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (trimmed.startsWith('/') || trimmed.startsWith('#')) return trimmed;
+  if (type === 'src' && /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(trimmed)) return trimmed;
+  try {
+    const url = new URL(trimmed, window.location.origin);
+    if (type === 'href' && ['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol)) return trimmed;
+    if (type === 'src' && ['http:', 'https:'].includes(url.protocol)) return trimmed;
+  } catch {}
+  return '';
+}
+
+export function sanitizeStoredHtml(source: string) {
+  if (typeof window === 'undefined' || typeof DOMParser === 'undefined') return '';
+  const documentNode = new DOMParser().parseFromString(`<body>${String(source || '')}</body>`, 'text/html');
+  const elements = Array.from(documentNode.body.querySelectorAll('*'));
+
+  for (const element of elements) {
+    const tag = element.tagName.toLowerCase();
+    if (!ALLOWED_TAGS.has(tag)) {
+      if (DROP_WITH_CONTENT.has(tag)) element.remove();
+      else element.replaceWith(...Array.from(element.childNodes));
+      continue;
+    }
+
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase();
+      const allowed = GLOBAL_ATTRIBUTES.has(name) || TAG_ATTRIBUTES[tag]?.has(name);
+      if (!allowed || name.startsWith('on') || name === 'style' || name === 'srcset') {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+      if (name === 'href' || name === 'src') {
+        const cleaned = safeUrl(attribute.value, name);
+        if (cleaned) element.setAttribute(name, cleaned);
+        else element.removeAttribute(name);
+      }
+    }
+
+    if (tag === 'a' && element.getAttribute('target') === '_blank') {
+      element.setAttribute('rel', 'noopener noreferrer');
+    }
+    if (tag === 'img') {
+      element.setAttribute('loading', 'lazy');
+      element.removeAttribute('class');
+    }
+  }
+
+  const walker = documentNode.createTreeWalker(documentNode.body, NodeFilter.SHOW_COMMENT);
+  const comments: Node[] = [];
+  let comment = walker.nextNode();
+  while (comment) {
+    comments.push(comment);
+    comment = walker.nextNode();
+  }
+  for (const item of comments) item.parentNode?.removeChild(item);
+  return documentNode.body.innerHTML;
+}
 
 function decodeHtmlEntities(value: string) {
   return String(value || '')
@@ -49,15 +123,14 @@ function renderExpression(expression: string, displayMode: boolean) {
     });
   } catch {
     const delimiter = displayMode ? ['\\[', '\\]'] : ['\\(', '\\)'];
-    return `<code>${delimiter[0]}${normalized}${delimiter[1]}</code>`;
+    const escaped = normalized.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
+    return `<code>${delimiter[0]}${escaped}${delimiter[1]}</code>`;
   }
 }
 
 function looksLikeDollarMath(expression: string) {
   const normalized = normalizeExpression(expression);
   if (!normalized) return false;
-
-  // Hindari salah membaca teks nominal seperti "$5 dan $10" sebagai rumus.
   if (/\s/.test(normalized) && !/[\\^_={}<>+\-*/=]/.test(normalized)) return false;
   return true;
 }
@@ -85,10 +158,9 @@ function renderInlineMathInText(text: string) {
 }
 
 export function renderMathHtml(html: string) {
+  const sanitized = sanitizeStoredHtml(String(html || ''));
   const renderedBlocks: string[] = [];
-  const protectedHtml = protectDisplayMath(String(html || ''), renderedBlocks);
-
-  // Rumus inline dirender hanya pada bagian teks, bukan pada tag/atribut HTML.
+  const protectedHtml = protectDisplayMath(sanitized, renderedBlocks);
   const renderedInline = protectedHtml
     .split(/(<[^>]+>)/g)
     .map((part) => (part.startsWith('<') ? part : renderInlineMathInText(part)))
@@ -101,7 +173,11 @@ export function renderMathHtml(html: string) {
 }
 
 export function MathHtml({ html, className }: { html: string; className?: string }) {
-  const rendered = useMemo(() => renderMathHtml(html || ''), [html]);
+  const [rendered, setRendered] = useState('');
+
+  useEffect(() => {
+    setRendered(renderMathHtml(html || ''));
+  }, [html]);
 
   return (
     <div

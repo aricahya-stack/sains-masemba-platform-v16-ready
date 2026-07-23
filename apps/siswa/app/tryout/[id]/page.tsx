@@ -1,7 +1,8 @@
-import { prisma, QuestionType, TryoutStatus, UserRole } from '@sh/db';
+import { prisma, QuestionType, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
 import { ExamMode } from '../../../components/exam-mode';
 import { redirect } from 'next/navigation';
+import { finalizeAttempt, isTryoutOpen, remainingAttemptSeconds } from '../../../lib/attempt-security';
 
 export default async function ExamPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireRole(UserRole.SISWA);
@@ -13,6 +14,8 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
       title: true,
       durationMinutes: true,
       status: true,
+      startAt: true,
+      endAt: true,
       questions: {
         select: {
           orderNo: true,
@@ -41,9 +44,7 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
     redirect('/tryout');
   }
 
-  const allowedStatuses: TryoutStatus[] = [TryoutStatus.OPEN, TryoutStatus.PAUSED, TryoutStatus.SCHEDULED];
-
-  if (!allowedStatuses.includes(tryout.status)) {
+  if (!isTryoutOpen(tryout)) {
     redirect('/tryout');
   }
 
@@ -61,6 +62,13 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
       },
       include: { answers: true },
     });
+  }
+
+
+  const remainingSeconds = remainingAttemptSeconds(attempt, tryout);
+  if (remainingSeconds <= 0) {
+    await finalizeAttempt(attempt.id, user.id);
+    redirect('/hasil');
   }
 
   const questionTypeMap = new Map(tryout.questions.map((row) => [row.question.id, row.question.questionType]));
@@ -89,7 +97,7 @@ export default async function ExamPage({ params }: { params: Promise<{ id: strin
       tryoutId={tryout.id}
       attemptId={attempt.id}
       tryoutTitle={tryout.title}
-      durationMinutes={tryout.durationMinutes}
+      remainingSeconds={remainingSeconds}
       initialWarnings={attempt.warnings}
       initialAnswers={initialAnswers}
       questions={questions}

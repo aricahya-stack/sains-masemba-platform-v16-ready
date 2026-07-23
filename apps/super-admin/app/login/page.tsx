@@ -4,7 +4,7 @@ import { BrandMark } from '../../components/app-shell';
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const params = await searchParams;
-  const error = params?.error; const serverError = error === 'server';
+  const error = params?.error; const serverError = error === 'server'; const rateLimited = error === 'rate';
   return (
     <div className="auth-card stack">
       <div className="login-mark-wrap">
@@ -15,7 +15,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         <h2 className="auth-card-title">Login {appMeta.roleLabel}</h2>
         <p className="muted">Masuk menggunakan akun portal yang telah diatur pada sistem.</p>
       </div>
-      {serverError ? <div className="error-note">Server belum membaca konfigurasi env atau database. Pastikan file .env sudah dibuat dari root project.</div> : error ? <div className="error-note">Email, password, atau role akun tidak cocok untuk aplikasi ini.</div> : null}
+      {serverError ? <div className="error-note">Login tidak dapat diproses karena layanan server sedang bermasalah. Periksa log deployment.</div> : rateLimited ? <div className="error-note">Terlalu banyak percobaan login. Tunggu sekitar 15 menit lalu coba kembali.</div> : error ? <div className="error-note">Email, password, atau role akun tidak cocok untuk aplikasi ini.</div> : null}
       <form method="post" action="/api/login">
         <div className="field">
           <label>Email</label>

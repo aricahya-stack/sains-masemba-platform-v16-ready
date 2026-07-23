@@ -17,7 +17,10 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const includePasswordHashes = url.searchParams.get('includeSecrets') !== 'false';
+  const includePasswordHashes = url.searchParams.get('includeSecrets') === 'true';
+  if (includePasswordHashes && request.headers.get('x-confirm-sensitive-backup') !== 'INCLUDE_PASSWORD_HASHES') {
+    return NextResponse.json({ error: 'Konfirmasi backup sensitif tidak valid.' }, { status: 400 });
+  }
 
   try {
     const result = await createDatabaseBackupBuffer({

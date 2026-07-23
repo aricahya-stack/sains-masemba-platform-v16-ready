@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma, UserRole } from '@sh/db';
-import { getCurrentUser, hashPassword } from '@sh/core';
+import { getCurrentUser, hashPassword, validatePassword } from '@sh/core';
 
 const allowedRoles = new Set<UserRole>(Object.values(UserRole));
 const allowedStatuses = new Set(['ACTIVE', 'INACTIVE']);
@@ -55,6 +55,10 @@ function validationError(body: Record<string, unknown>) {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'Format email tidak valid.';
   if (!role) return 'Role tidak valid.';
   if (!status) return 'Status harus ACTIVE atau INACTIVE.';
+  if (body.password) {
+    const passwordError = validatePassword(String(body.password));
+    if (passwordError) return passwordError;
+  }
   return null;
 }
 
@@ -128,7 +132,10 @@ export async function PUT(request: Request) {
     className: role === UserRole.SISWA && body.className ? String(body.className).trim() : null,
     status,
   };
-  if (body.password) updateData.passwordHash = await hashPassword(String(body.password));
+  if (body.password) {
+    updateData.passwordHash = await hashPassword(String(body.password));
+    updateData.authVersion = { increment: 1 };
+  }
 
   try {
     const data = await prisma.user.update({ where: { id }, data: updateData });

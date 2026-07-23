@@ -8,6 +8,7 @@ import {
   UserRole,
 } from '@sh/db';
 import { splitLines, toDateOrNull, toFloat, toInt } from './utils';
+import { validatePassword } from './security';
 import {
   makeInternalTryoutTopicSlug,
   normalizeTopicCode,
@@ -648,7 +649,11 @@ async function importUsers(rows: ImportRow[]): Promise<ImportResult> {
     if (!userStatuses.has(status)) throw new Error(`Baris ${rowNumber}: status harus ACTIVE atau INACTIVE.`);
 
     const password = text(row.password);
-    const passwordHash = password ? await bcrypt.hash(password, 10) : undefined;
+    if (password) {
+      const passwordError = validatePassword(password);
+      if (passwordError) throw new Error(`Baris ${rowNumber}: ${passwordError}`);
+    }
+    const passwordHash = password ? await bcrypt.hash(password, 12) : undefined;
     prepared.push({
       fullName,
       email,
@@ -686,7 +691,10 @@ async function importUsers(rows: ImportRow[]): Promise<ImportResult> {
       };
 
       if (existing) {
-        await tx.user.update({ where: { id: existing.id }, data });
+        await tx.user.update({
+          where: { id: existing.id },
+          data: { ...data, ...(row.passwordHash ? { authVersion: { increment: 1 } } : {}) },
+        });
         result.updated += 1;
         result.details.usersUpdated += 1;
       } else {

@@ -16,7 +16,7 @@ type RestoreSpec = {
 
 const specs: RestoreSpec[] = [
   { sheet: 'APP_SETTINGS', delegate: 'appSetting', fieldTypes: { updatedAt: 'date' } },
-  { sheet: 'USERS', delegate: 'user', fieldTypes: { createdAt: 'date', updatedAt: 'date' }, nullable: ['passwordHash', 'phone', 'className'] },
+  { sheet: 'USERS', delegate: 'user', fieldTypes: { authVersion: 'int', createdAt: 'date', updatedAt: 'date' }, nullable: ['passwordHash', 'phone', 'className'] },
   { sheet: 'PARENT_STUDENT_LINKS', delegate: 'parentStudentLink', fieldTypes: { isActive: 'boolean', createdAt: 'date' } },
   { sheet: 'TOPICS', delegate: 'topic', fieldTypes: { orderNo: 'int' }, nullable: ['description'] },
   { sheet: 'MATERIALS', delegate: 'material', fieldTypes: { createdAt: 'date', updatedAt: 'date' }, nullable: ['summaryText', 'summaryHtml', 'coverImageUrl', 'level'] },

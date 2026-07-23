@@ -8,7 +8,7 @@ function timestamp(date: Date) {
 
 async function main() {
   const outputDir = path.resolve(process.env.BACKUP_DIR || 'backups');
-  const includePasswordHashes = process.env.BACKUP_INCLUDE_PASSWORD_HASHES !== 'NO';
+  const includePasswordHashes = process.env.BACKUP_INCLUDE_PASSWORD_HASHES === 'YES';
   await fs.mkdir(outputDir, { recursive: true });
 
   const result = await createDatabaseBackupBuffer({

@@ -31,7 +31,7 @@ CATATAN PENTING
   guru@sh.local
   siswa@sh.local
   orangtua@sh.local
-  password: Admin123!
+  password: WAJIB_DIISI_DI_ENV
 
 
 Setelah update v15, jalankan lagi npm run db:push bila database sudah pernah dipakai agar struktur terbaru tetap sinkron.

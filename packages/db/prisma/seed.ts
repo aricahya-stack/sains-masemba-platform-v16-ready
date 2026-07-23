@@ -5,8 +5,11 @@ import { slugify } from "../../core/src/utils";
 const prisma = new PrismaClient();
 
 async function main() {
-  const defaultPassword = process.env.DEFAULT_SEED_PASSWORD || process.env.SEED_DEFAULT_PASSWORD || "Admin123!";
-  const passwordHash = await bcrypt.hash(defaultPassword, 10);
+  const defaultPassword = process.env.DEFAULT_SEED_PASSWORD || process.env.SEED_DEFAULT_PASSWORD;
+  if (!defaultPassword || defaultPassword.length < 12 || !/[a-z]/.test(defaultPassword) || !/[A-Z]/.test(defaultPassword) || !/\d/.test(defaultPassword) || !/[^A-Za-z0-9]/.test(defaultPassword)) {
+    throw new Error('DEFAULT_SEED_PASSWORD wajib diisi minimal 12 karakter serta memuat huruf besar, huruf kecil, angka, dan simbol.');
+  }
+  const passwordHash = await bcrypt.hash(defaultPassword, 12);
 
   const userInputs = [
     {
@@ -51,6 +54,7 @@ async function main() {
         phone: user.phone,
         className,
         passwordHash,
+        authVersion: { increment: 1 },
         status: "ACTIVE",
       },
       create: {

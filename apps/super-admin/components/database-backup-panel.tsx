@@ -48,6 +48,7 @@ export function DatabaseBackupPanel({ counts }: { counts: BackupCount[] }) {
         method: 'GET',
         credentials: 'same-origin',
         cache: 'no-store',
+        headers: includeSecrets ? { 'X-Confirm-Sensitive-Backup': 'INCLUDE_PASSWORD_HASHES' } : undefined,
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));

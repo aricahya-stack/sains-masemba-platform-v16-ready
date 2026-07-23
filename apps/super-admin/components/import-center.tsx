@@ -291,6 +291,14 @@ export function ImportCenter({
 
   const onFile = async (file: File | null) => {
     if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.xlsx')) {
+      notify('File ditolak', 'Hanya format .xlsx yang diizinkan.');
+      return;
+    }
+    if (file.size <= 0 || file.size > 5 * 1024 * 1024) {
+      notify('File ditolak', 'Ukuran file Excel maksimal 5 MB.');
+      return;
+    }
     resetAfterFile();
     setFileName(file.name);
     try {
@@ -327,6 +335,7 @@ export function ImportCenter({
 
       const detectedKind = detectedSheets[0].kind;
       const parsedRows = detectedSheets.flatMap((item) => item.rows);
+      if (parsedRows.length > 5000) throw new Error('Maksimal 5.000 baris per file import.');
       const sheetNames = detectedSheets.map((item) => item.sheetName);
 
       setKind(detectedKind);
@@ -421,7 +430,7 @@ export function ImportCenter({
           <p className="muted">Data tidak otomatis disimpan saat file dipilih. Setiap baris user menghasilkan satu akun; banyak Super Admin, guru, siswa, dan orang tua dapat dimuat dalam file yang sama. Tombol Import ke Database baru aktif setelah validasi berhasil tanpa error.</p>
         </div>
 
-        <input className="input" type="file" accept=".xlsx,.xls" onChange={(event) => onFile(event.target.files?.[0] || null)} />
+        <input className="input" type="file" accept=".xlsx" onChange={(event) => onFile(event.target.files?.[0] || null)} />
         <div className="notice">{summary}</div>
 
         <div className="button-row" style={{ justifyContent: 'flex-start', flexWrap: 'wrap' }}>

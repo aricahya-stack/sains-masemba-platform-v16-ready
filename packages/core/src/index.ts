@@ -7,3 +7,5 @@ export * from './content-import';
 export * from './content-scope';
 
 export * from './tryout-statistics';
+
+export * from './security';

@@ -26,7 +26,7 @@ type FontSize = 'small' | 'normal' | 'large';
 export function ExamMode({
   attemptId,
   tryoutTitle,
-  durationMinutes,
+  remainingSeconds,
   initialWarnings,
   initialAnswers,
   questions,
@@ -34,7 +34,7 @@ export function ExamMode({
   tryoutId: string;
   attemptId: string;
   tryoutTitle: string;
-  durationMinutes: number;
+  remainingSeconds: number;
   initialWarnings: number;
   initialAnswers: Record<string, AnswerValue>;
   questions: ExamQuestion[];
@@ -44,7 +44,7 @@ export function ExamMode({
   const [answers, setAnswers] = useState<Record<string, AnswerValue>>(initialAnswers);
   const [doubts, setDoubts] = useState<Record<string, boolean>>({});
   const [warnings, setWarnings] = useState(initialWarnings);
-  const [seconds, setSeconds] = useState(durationMinutes * 60);
+  const [seconds, setSeconds] = useState(remainingSeconds);
   const [submitted, setSubmitted] = useState(false);
   const [fontSize, setFontSize] = useState<FontSize>('normal');
 
@@ -157,6 +157,8 @@ export function ExamMode({
     const payload = await response.json();
     if (!response.ok) {
       notify('Gagal menyimpan jawaban', payload.error || 'Server error.');
+      if (response.status === 409) window.location.href = '/hasil';
+      if (response.status === 423) window.location.href = '/tryout';
       return;
     }
     notify('Sudah tersimpan', 'Jawaban tersimpan otomatis.');

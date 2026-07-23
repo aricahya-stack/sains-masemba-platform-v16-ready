@@ -121,10 +121,10 @@ npm run db:backfill-notifications
 
 | Portal | Email | Password |
 |---|---|---|
-| Super Admin | `superadmin@sh.local` | `Admin123!` |
-| Guru | `guru@sh.local` | `Admin123!` |
-| Siswa | `siswa@sh.local` | `Admin123!` |
-| Orang Tua | `orangtua@sh.local` | `Admin123!` |
+| Super Admin | `superadmin@sh.local` | `ditentukan melalui DEFAULT_SEED_PASSWORD` |
+| Guru | `guru@sh.local` | `ditentukan melalui DEFAULT_SEED_PASSWORD` |
+| Siswa | `siswa@sh.local` | `ditentukan melalui DEFAULT_SEED_PASSWORD` |
+| Orang Tua | `orangtua@sh.local` | `ditentukan melalui DEFAULT_SEED_PASSWORD` |
 
 Ganti password seed pada `.env` sebelum dipakai pada lingkungan produksi.
 

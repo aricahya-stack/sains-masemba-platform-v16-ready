@@ -2,6 +2,7 @@ import { prisma, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
 import { CheckCircle2, Lightbulb, ShieldCheck, Sparkles } from 'lucide-react';
 import { PageHero } from '../../components/page-hero';
+import { MathHtml } from '../../components/math-html';
 
 type PublishedTip = {
   id: string;
@@ -73,7 +74,7 @@ export default async function TipsTkadPage() {
                     <span><CheckCircle2 size={20} /></span>
                     <h3>{tip.title}</h3>
                   </div>
-                  <div dangerouslySetInnerHTML={{ __html: tip.contentHtml }} />
+                  <MathHtml html={tip.contentHtml} />
                 </article>
               ))}
             </div>

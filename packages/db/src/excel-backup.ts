@@ -91,7 +91,7 @@ function cellValueForLongTextSheet(chunk: LongTextChunk, header: string): string
   return chunk[header as keyof LongTextChunk];
 }
 
-export async function collectDatabaseBackupSheets(includePasswordHashes = true): Promise<BackupSheet[]> {
+export async function collectDatabaseBackupSheets(includePasswordHashes = false): Promise<BackupSheet[]> {
   const [
     appSettings,
     users,
@@ -141,6 +141,7 @@ export async function collectDatabaseBackupSheets(includePasswordHashes = true):
     'phone',
     'className',
     'status',
+    'authVersion',
     'createdAt',
     'updatedAt',
   ];
@@ -278,7 +279,7 @@ export async function collectDatabaseBackupSheets(includePasswordHashes = true):
 }
 
 export async function createDatabaseBackupWorkbook(options: DatabaseBackupOptions = {}) {
-  const includePasswordHashes = options.includePasswordHashes !== false;
+  const includePasswordHashes = options.includePasswordHashes === true;
   const generatedAt = new Date();
   const sheets = await collectDatabaseBackupSheets(includePasswordHashes);
   const workbook = XLSX.utils.book_new();
