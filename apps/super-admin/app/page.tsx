@@ -1,20 +1,48 @@
+import type { CSSProperties } from 'react';
 import { prisma, UserRole } from '@sh/db';
 import { requireRole } from '@sh/core';
-import { BadgeCheck, BookOpenText, ClipboardList, FileSpreadsheet, MonitorCog, PencilRuler, Settings2, ShieldCheck, Users } from 'lucide-react';
-import { PageHero } from '../components/page-hero';
-import { StatGrid } from '../components/stat-grid';
-import { Timeline } from '../components/timeline';
+import {
+  BadgeCheck,
+  BookOpenText,
+  ClipboardList,
+  FileSpreadsheet,
+  GraduationCap,
+  MonitorCog,
+  PencilRuler,
+  Settings2,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
+import {
+  DashboardChart,
+  DashboardHero,
+  NeumorphicCard,
+  QuickActions,
+  RecentActivity,
+} from '@sh/ui';
 
 export default async function Page() {
   await requireRole(UserRole.SUPER_ADMIN);
 
-  const [users, teachers, students, parents, materials, practiceQuestions, tryoutQuestions, tryouts, tryoutGroupRows, incidents] = await Promise.all([
+  const [
+    users,
+    teachers,
+    students,
+    parents,
+    materials,
+    practiceQuestions,
+    tryoutQuestions,
+    tryouts,
+    tryoutGroupRows,
+    incidents,
+  ] = await Promise.all([
     prisma.user.count(),
     prisma.user.count({ where: { role: UserRole.GURU } }),
     prisma.user.count({ where: { role: UserRole.SISWA } }),
     prisma.user.count({ where: { role: UserRole.ORANG_TUA } }),
     prisma.material.count(),
-    prisma.question.count({ where: {
+    prisma.question.count({
+      where: {
         tryoutQuestions: { none: {} },
         NOT: {
           blueprint: {
@@ -26,8 +54,10 @@ export default async function Page() {
             },
           },
         },
-      } }),
-    prisma.question.count({ where: {
+      },
+    }),
+    prisma.question.count({
+      where: {
         OR: [
           { tryoutQuestions: { some: {} } },
           {
@@ -41,10 +71,18 @@ export default async function Page() {
             },
           },
         ],
-      } }),
+      },
+    }),
     prisma.tryout.count(),
-    prisma.question.findMany({ where: { blueprint: { is: { testGroup: { not: null } } } }, select: { authorId: true, blueprint: { select: { testGroup: true } } } }),
-    prisma.tryoutIncident.findMany({ orderBy: { createdAt: 'desc' }, take: 5, include: { tryout: true } }),
+    prisma.question.findMany({
+      where: { blueprint: { is: { testGroup: { not: null } } } },
+      select: { authorId: true, blueprint: { select: { testGroup: true } } },
+    }),
+    prisma.tryoutIncident.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+      include: { tryout: true },
+    }),
   ]);
 
   const groupTotals = new Map<string, number>();
@@ -55,73 +93,89 @@ export default async function Page() {
     groupTotals.set(key, (groupTotals.get(key) || 0) + 1);
   }
   const completeGroups = Array.from(groupTotals.values()).filter((count) => count === 30).length;
-  const stats = [
-    { label: 'Total user', value: String(users), note: `${teachers} guru • ${students} siswa • ${parents} orang tua`, badge: 'User' },
-    { label: 'Topik & materi', value: String(materials), note: 'Materi seluruh guru, termasuk draft dan publikasi.', badge: 'Konten' },
-    { label: 'Soal latihan', value: String(practiceQuestions), note: 'Soal yang tampil di dalam materi belajar.', badge: 'Latihan' },
-    { label: 'Soal Tryout', value: String(tryoutQuestions), note: `${completeGroups} kelompok memiliki tepat 30 soal.`, badge: 'Ujian' },
-    { label: 'Jadwal Tryout', value: String(tryouts), note: 'Jadwal hasil Mapping Tryout lintas guru.', badge: 'CBT' },
+  const totalQuestions = practiceQuestions + tryoutQuestions;
+  const readiness = Math.min(100, completeGroups * 10 + (tryouts > 0 ? 20 : 0));
+
+  const chartData = [
+    { label: 'Guru', value: teachers, target: Math.max(teachers, 10) },
+    { label: 'Siswa', value: students, target: Math.max(students, 25) },
+    { label: 'Orang tua', value: parents, target: Math.max(parents, 20) },
+    { label: 'Materi', value: materials, target: Math.max(materials, 30) },
+    { label: 'Latihan', value: practiceQuestions, target: Math.max(practiceQuestions, 50) },
+    { label: 'Tryout', value: tryoutQuestions, target: Math.max(tryoutQuestions, 30) },
   ];
 
-  const timelineItems = incidents.length
-    ? incidents.map((item) => ({
+  const activityItems = incidents.length
+    ? incidents.map((item, index) => ({
         title: item.type,
-        subtitle: `${item.tryout.title}${item.message ? ` • ${item.message}` : ''}`,
-        time: item.createdAt.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+        detail: `${item.tryout.title}${item.message ? ` • ${item.message}` : ''}`,
+        actor: 'Monitoring CBT',
+        time: item.createdAt.toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }),
+        icon: index % 2 === 0 ? <MonitorCog size={18} /> : <ShieldCheck size={18} />,
+        tone: index % 2 === 0 ? ('blue' as const) : ('lavender' as const),
       }))
-    : [{ title: 'Sistem siap', subtitle: 'Belum ada insiden terbaru.', time: '-' }];
+    : [
+        {
+          title: 'Sistem siap',
+          detail: 'Belum ada insiden tryout terbaru.',
+          actor: 'Sains Masemba',
+          time: 'Sekarang',
+          icon: <ShieldCheck size={18} />,
+          tone: 'mint' as const,
+        },
+      ];
 
   const actions = [
-    { title: 'Manajemen user', text: 'Kelola akun guru, siswa, orang tua, dan Super Admin.', icon: Users, href: '/users' },
-    { title: 'Topik & materi', text: 'Edit seluruh topik dan materi langsung dalam tabel WYSIWYG.', icon: BookOpenText, href: '/belajar' },
-    { title: 'Konten Tryout', text: 'Kelola kisi-kisi dan soal Tryout dalam satu tabel.', icon: ClipboardList, href: '/tryout' },
-    { title: 'Mapping Tryout', text: 'Jadwalkan paket yang sudah memiliki tepat 30 soal.', icon: PencilRuler, href: '/mapping-tryout' },
-    { title: 'Approval konten', text: 'Pantau materi, latihan, konten Tryout, dan jadwal yang belum final.', icon: BadgeCheck, href: '/approval' },
-    { title: 'Import Excel', text: 'Import materi, latihan, serta kisi-kisi dan soal Tryout.', icon: FileSpreadsheet, href: '/imports' },
-    { title: 'Monitoring Tryout', text: 'Lihat pengerjaan siswa dan warning ujian terbaru.', icon: MonitorCog, href: '/monitoring' },
-    { title: 'Settings', text: 'Atur palet warna, font, dan moto global.', icon: Settings2, href: '/settings' },
+    { title: 'Manajemen user', description: 'Kelola akun guru, siswa, orang tua, dan Super Admin.', icon: <Users size={23} />, href: '/users' },
+    { title: 'Topik & materi', description: 'Edit materi dan konten pembelajaran dalam tabel WYSIWYG.', icon: <BookOpenText size={23} />, href: '/belajar' },
+    { title: 'Konten Tryout', description: 'Kelola kisi-kisi dan soal Tryout dalam satu alur.', icon: <ClipboardList size={23} />, href: '/tryout' },
+    { title: 'Mapping Tryout', description: 'Jadwalkan paket yang telah memiliki tepat 30 soal.', icon: <PencilRuler size={23} />, href: '/mapping-tryout' },
+    { title: 'Approval konten', description: 'Pantau materi dan jadwal yang belum final.', icon: <BadgeCheck size={23} />, href: '/approval' },
+    { title: 'Import Excel', description: 'Impor materi, latihan, kisi-kisi, dan soal Tryout.', icon: <FileSpreadsheet size={23} />, href: '/imports' },
+    { title: 'Monitoring', description: 'Pantau pengerjaan siswa dan peringatan ujian.', icon: <MonitorCog size={23} />, href: '/monitoring' },
+    { title: 'Pengaturan', description: 'Atur tema, font, motto, dan identitas platform.', icon: <Settings2 size={23} />, href: '/settings' },
   ];
 
   return (
-    <div className="stack">
-      <PageHero
+    <div className="dashboard-v17">
+      <DashboardHero
         eyebrow="Super Admin"
         title="Pusat kendali Sains Masemba"
-        description="Dashboard telah diselaraskan dengan struktur Topik & Materi, Latihan, konten Tryout 30 soal, Mapping Tryout, dan monitoring ujian."
+        description="Kelola pengguna, pembelajaran, tryout, dan monitoring platform melalui dashboard yang lebih ringan, konsisten, dan mudah dipindai."
+        badge="Sistem aktif"
+        action={
+          <div className="grid min-w-48 grid-cols-[auto_1fr] items-center gap-3 rounded-2xl bg-[#EEF0F5] p-4 shadow-[inset_3px_3px_7px_#c5c8ce,inset_-3px_-3px_7px_#ffffff]">
+            <span className="grid size-11 place-items-center rounded-2xl bg-[#6C8EF5] text-white"><ShieldCheck size={22} /></span>
+            <span><strong className="block text-xl text-slate-900">{users}</strong><small className="text-slate-500">pengguna terdaftar</small></span>
+          </div>
+        }
       />
-      <StatGrid items={stats} />
-      <div className="dashboard-card-grid admin-grid">
-        {actions.map((card) => {
-          const Icon = card.icon;
-          return (
-            <a key={card.title} href={card.href} className="dashboard-action-card">
-              <span className="dashboard-icon"><Icon size={24} /></span>
-              <strong>{card.title}</strong>
-              <p>{card.text}</p>
-            </a>
-          );
-        })}
-      </div>
-      <div className="grid-2">
-        <section className="card stack">
-          <div className="section-title-row">
-            <div>
-              <div className="eyebrow">Status sistem</div>
-              <strong>Kontrol lintas portal</strong>
-            </div>
-            <ShieldCheck size={26} />
+
+      <section className="dashboard-kpis" aria-label="Indikator utama">
+        <NeumorphicCard title="Total pengguna" value={String(users)} icon={<Users size={23} />} trend={{ direction: 'up', value: `${teachers} guru`, label: `${students} siswa` }} />
+        <NeumorphicCard title="Materi tersedia" value={String(materials)} icon={<BookOpenText size={23} />} trend={{ direction: 'up', value: 'Terpusat', label: 'lintas guru' }} />
+        <NeumorphicCard title="Bank soal" value={String(totalQuestions)} icon={<ClipboardList size={23} />} trend={{ direction: 'up', value: `${practiceQuestions} latihan`, label: `${tryoutQuestions} tryout` }} />
+        <NeumorphicCard title="Jadwal tryout" value={String(tryouts)} icon={<GraduationCap size={23} />} trend={{ direction: 'up', value: `${completeGroups} paket`, label: 'siap 30 soal' }} />
+      </section>
+
+      <div className="dashboard-main-grid">
+        <DashboardChart data={chartData} title="Komposisi platform" subtitle="Perbandingan pengguna dan volume konten aktif" />
+        <section className="dashboard-side-card" aria-label="Kesiapan operasional">
+          <p className="m-0 text-xs font-black uppercase tracking-[0.14em] text-[#6C8EF5]">Kesiapan operasional</p>
+          <h2 className="mt-2 mb-0 text-xl font-black tracking-tight text-slate-900">Status platform hari ini</h2>
+          <div className="dashboard-side-metric" style={{ '--progress': `${readiness}%` } as CSSProperties}>
+            <span><strong>{readiness}%</strong><small>kesiapan</small></span>
           </div>
-          <p className="muted">Super Admin dapat mengelola konten milik seluruh guru, menentukan pemilik konten, memvalidasi paket 30 soal, dan menjadwalkan Tryout tanpa Excel.</p>
-          <div className="notice">Soal Latihan dan soal Tryout dipisahkan berdasarkan relasi kisi-kisi sehingga keduanya tidak tercampur pada halaman siswa.</div>
-        </section>
-        <section className="card stack">
-          <div>
-            <div className="eyebrow">Aktivitas terbaru</div>
-            <strong>Jejak insiden Tryout</strong>
+          <div className="dashboard-soft-list">
+            <div><span>Paket lengkap</span><strong>{completeGroups}</strong></div>
+            <div><span>Orang tua</span><strong>{parents}</strong></div>
+            <div><span>Insiden terbaru</span><strong>{incidents.length}</strong></div>
           </div>
-          <Timeline items={timelineItems} />
         </section>
       </div>
+
+      <QuickActions items={actions} />
+      <RecentActivity items={activityItems} title="Aktivitas monitoring terbaru" />
     </div>
   );
 }

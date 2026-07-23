@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
 import { PageHero } from './page-hero';
 import { useToast } from './toast-provider';
 
@@ -296,6 +295,7 @@ export function ImportCenter({
     setFileName(file.name);
     try {
       const buffer = await file.arrayBuffer();
+      const XLSX = await import('xlsx');
       const workbook = XLSX.read(buffer, { type: 'array' });
       const detectedSheets: Array<{ sheetName: string; kind: ImportKind; rows: ImportRow[] }> = [];
 

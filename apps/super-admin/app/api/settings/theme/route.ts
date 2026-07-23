@@ -1,5 +1,6 @@
 
 import { NextResponse } from 'next/server';
+import { revalidateTag } from 'next/cache';
 import { prisma, UserRole } from '@sh/db';
 import { DEFAULT_MOTTO, FONT_OPTIONS, getCurrentUser, THEME_OPTIONS } from '@sh/core';
 
@@ -37,5 +38,6 @@ export async function POST(request: Request) {
       create: { key: 'font', value: font },
     }),
   ]);
+  revalidateTag('global-branding');
   return NextResponse.json({ ok: true, theme, motto, font });
 }
